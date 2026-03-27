@@ -23,6 +23,8 @@ namespace CapstoneUdpServer.Data
         private PlayerRank _playerRank;
         private int _relatedRoomId;
 
+        public bool IsGameReady = false;
+
         private EndPoint _clientEp;
         
         public string? PlayerName => _playerName;

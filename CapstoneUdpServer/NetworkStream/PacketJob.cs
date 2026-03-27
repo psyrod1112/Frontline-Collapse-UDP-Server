@@ -6,7 +6,7 @@ namespace CapstoneUdpServer.NetworkStream;
 
 public class PacketJob:IJob
 {
-
+    
     private UdpServer _server;
     private byte[] _buffer;
     private int _bufferSize;

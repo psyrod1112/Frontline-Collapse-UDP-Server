@@ -1,5 +1,6 @@
 
 using System;
+using System.Numerics;
 
 namespace CapstoneUdpServer.Data;
 
@@ -8,40 +9,50 @@ public enum PacketScene
     Lobby=0,
     InGame=1,
 }
-public enum PacketType
+public enum LobbyPacketType
 {
     //플레이어 관련
-    Connection=0,
-    Disconnection=1,
-    Spawn=2,
-    Despawn=3,
+    Connection,
+    Disconnection,
+    Spawn,
+    Despawn,
         
     //룸 관련
-    CreateRequest=4,
-    CreateRoom = 5,
-    AddPlayerRequest=6,
-    AddPlayerRoom=7,
-    RemovePlayerRoom=8,
-    DestroyRoom = 9,
-    EnterRequest=10,
-    EnterRoom=11,
-    ExitRequest=12,
-    ExitRoom=13,
-    RoomUpdate=14,
+    CreateRequest,
+    CreateRoom,
+    AddPlayerRequest,
+    AddPlayerRoom,
+    RemovePlayerRoom,
+    DestroyRoom,
+    EnterRequest,
+    EnterRoom,
+    ExitRequest,
+    ExitRoom,
+    RoomUpdate,
         
     //게임 관련
-    GameStart=15,
-    GameOver=16,
-    PlayerSpawn=17
-
+    GameStart,
+    GameReady,
+    
 }
 
+public enum InGamePacketType
+{
+    //인게임 관련
+    SpawnPlayerUnit,
+    GameOver,
+}
 
+#region 로비 패킷
 
 public class BasePacket
 {
     public PacketScene Scene {get; set;}
-    public PacketType Type {get; set;}
+    public LobbyPacketType Type {get; set;}
+    
+    public InGamePacketType Type2 {get; set;}
+    
+    public DateTime LastUpdateTime  {get; set;}
 }
 
 
@@ -55,7 +66,6 @@ public class PlayerPacket : BasePacket
     public PlayerRank PlayerRank  {get; set;}
     public int RelatedRoomId   {get; set;}
 
-    public DateTime LastUpdateTime {get; set;}
 }
 
 public class RoomPacket : BasePacket
@@ -67,8 +77,50 @@ public class RoomPacket : BasePacket
     public int RoomPlayerLimit  {get; set;}
     public int CurrentRoomPlayers  {get; set;}
 
-    public DateTime LastUpdateTime  {get; set;}
 }
+
+#endregion
+
+
+
+#region 인게임 패킷
+
+
+public class InGamePacket : BasePacket
+{
+    public int FieldId {get; set;}
+    public int PlayerId {get; set;} //Lobby 의 PlayerId
+    public float CurrentHp {get; set;}
+    public float DamageAmount {get; set;}
+    public float DamagedAmount {get; set;}
+    public Vector3 Position {get; set;}
+    public Vector3 Rotation {get; set;}
+    public int PrefabIndex {get; set;}
+}
+
+public class PlayerUnitPacket : InGamePacket
+{
+    public int WeaponIndex {get; set;}
+    public int BuildingIndex {get; set;}
+}
+
+public class NpcUnitPacket : InGamePacket
+{
+    public int NpcUnitId {get; set;}
+    public int DropGolds {get; set;}
+    public int DropItemIndex {get; set;}
+}
+
+public class BuildingUnitPacket : InGamePacket
+{
+    public int BuildingUnitId {get; set;}
+    public int MissileIndex {get; set;}
+        
+}
+    
+    
+
+#endregion
 
 
 
