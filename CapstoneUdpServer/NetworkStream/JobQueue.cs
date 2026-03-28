@@ -1,10 +1,10 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 
 namespace CapstoneUdpServer.NetworkStream;
 
 public class JobQueue
 {
-    private readonly BlockingCollection<IJob> _jobs = new BlockingCollection<IJob>();
+    private readonly BlockingCollection<IJob> _jobs = new();
 
     public void Enqueue(IJob job)
     {
@@ -13,7 +13,6 @@ public class JobQueue
 
     public IJob Dequeue()
     {
-        
         return _jobs.Take();
     }
 }

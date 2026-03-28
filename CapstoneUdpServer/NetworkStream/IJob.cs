@@ -1,6 +1,6 @@
-﻿namespace CapstoneUdpServer.NetworkStream;
+namespace CapstoneUdpServer.NetworkStream;
 
 public interface IJob
 {
-    public abstract void Execute();
+    void Execute();
 }

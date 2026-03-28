@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Numerics;
 
 namespace CapstoneUdpServer.Data;
@@ -6,11 +6,11 @@ namespace CapstoneUdpServer.Data;
 public class PlayerUnitData
 {
     private readonly PlayerData _playerData;
-    private int _fieldId;
-    private int _currentHp;
-    private int _weaponPrefabIndex;
-    private Vector3 _position;
-    private Vector3 _rotation;
+    private readonly int _fieldId;
+    private readonly int _currentHp;
+    private readonly int _weaponPrefabIndex;
+    private readonly Vector3 _position;
+    private readonly Vector3 _rotation;
 
     // PlayerData 위임 프로퍼티
     public int PlayerId => _playerData.PlayerId;

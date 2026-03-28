@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
@@ -20,11 +20,11 @@ public class UdpServer:IDisposable
     private bool _isRunning;
     private Thread[] _workerThreads;
     private const int WORKER_THREAD_COUNT = 10;
-    
+
     private JobQueue _jobQueue = new JobQueue();
     private ConcurrentDictionary<int, PlayerData> _players;
     private ConcurrentDictionary<int, RoomData> _roomLists;
-    
+
     private int _nextPlayerId;
     private int _nextRoomId;
     private bool _disposed;
@@ -41,7 +41,7 @@ public class UdpServer:IDisposable
         _inGameDataList = new ConcurrentDictionary<int, InGameData>();
         _players = new ConcurrentDictionary<int, PlayerData>();
         _roomLists = new ConcurrentDictionary<int, RoomData>();
-        
+
         _nextPlayerId = 0;
         _nextRoomId = 0;
         _disposed = false;
@@ -61,7 +61,7 @@ public class UdpServer:IDisposable
         //소켓 바인딩
         IPEndPoint serverEp = new IPEndPoint(IPAddress.Parse(_config.ServerIp), _config.Port);
         _socket.Bind(serverEp);
-        
+
         Console.WriteLine("[서버] Initialize: 소켓 초기 설정 완료");
 
     }
@@ -73,7 +73,7 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버] StartAsync: 이미 연결되어 있습니다...");
             return;
         }
-        
+
         _isRunning = true;
 
         StartThreadWork();
@@ -82,8 +82,8 @@ public class UdpServer:IDisposable
     }
 
     #endregion
-    
-    
+
+
 
     #region 스레드 메서드
 
@@ -96,7 +96,7 @@ public class UdpServer:IDisposable
             _workerThreads[i] = new Thread(() => ThreadJobProcessLoop(threadId));
             _workerThreads[i].IsBackground = true;
             _workerThreads[i].Start();
-            
+
         }
         Console.WriteLine($"[서버] StartThreadWork: 워크 스레드 {WORKER_THREAD_COUNT}개가 실행 중입니다.");
     }
@@ -112,15 +112,15 @@ public class UdpServer:IDisposable
             Console.WriteLine($"[서버] {threadId}번 스레드 패킷 처리 (총 처리량 : {++processThreadCount})");
             Console.ResetColor();
         }
-        
+
     }
 
     #endregion
-    
-    
+
+
     private void ReceiveLoopAsync()
     {
-        
+
         //버퍼 빌려오기
         byte[] buffer = ArrayPool<byte>.Shared.Rent(_config.BufferSize);
         EndPoint clientEp = new IPEndPoint(IPAddress.Any, _config.Port);
@@ -139,7 +139,7 @@ public class UdpServer:IDisposable
                     Console.WriteLine($"[서버] ReceiveLoopAsync: 받은 패킷 Enqueue함");
                 }
             }
-            
+
         }
         catch (SocketException se)
         {
@@ -154,17 +154,17 @@ public class UdpServer:IDisposable
             ArrayPool<byte>.Shared.Return(buffer);
             Dispose();
         }
-        
+
         Console.WriteLine("[서버] ReceiveLoopAsync: 수신 루프 종료");
     }
 
     public void ProcessPacket(byte[] buffer, int bufferSize, IPEndPoint clientEp)
     {
-        
+
         //BasePacket 헤더 이용
         string jsonData = Encoding.UTF8.GetString(buffer, 0, bufferSize);
         BasePacket? header = JsonSerializer.Deserialize<BasePacket>(jsonData);
-        
+
         Console.WriteLine(jsonData);
 
         switch (header?.Scene)
@@ -219,11 +219,11 @@ public class UdpServer:IDisposable
                 Console.WriteLine("[서버]: 패킷을 찾을 수 없습니다.");
                 break;
         }
-        
+
         //예외상황?
 
-        
-        
+
+
     }
 
     #region 핸들러 메소드
@@ -256,15 +256,25 @@ public class UdpServer:IDisposable
             {
                 Console.WriteLine("[서버]  HandleConnectionPacket: 이미 한번 접속했던 유저! " + playerData.PlayerName);
                 Interlocked.Decrement(ref _nextPlayerId);
-            
-                SendPlayerSpawn(playerData, clientEp);
-        
+
+                PlayerPacket spawnPacket = new PlayerPacket
+                {
+                    Type = LobbyPacketType.Spawn,
+                    PlayerId = playerData.PlayerId,
+                    PlayerName = playerData.PlayerName,
+                    WinScore = playerData.WinScore,
+                    WinRate = playerData.WinRate,
+                    PlayerRank = playerData.PlayerRank,
+                    LastUpdateTime = DateTime.UtcNow
+                };
+                SendPlayerSpawn(spawnPacket, clientEp);
+
                 SendRoomList(packet, clientEp);
-            
+
                 return;
             }
         }
-        
+
         //새 유저 만들기
         PlayerData newPlayerData = new PlayerData(packet.PlayerName, playerId,0 ,0f, PlayerRank.Sergeant, clientEp);
         _players[playerId] = newPlayerData;
@@ -272,16 +282,27 @@ public class UdpServer:IDisposable
 
         Console.WriteLine($"packet.PlayerName : {packet.PlayerName}");
         Console.WriteLine($"packetData : {newPlayerData}");
-        SendPlayerSpawn(newPlayerData, clientEp);
-        
+
+        PlayerPacket newSpawnPacket = new PlayerPacket
+        {
+            Type = LobbyPacketType.Spawn,
+            PlayerId = newPlayerData.PlayerId,
+            PlayerName = newPlayerData.PlayerName,
+            WinScore = newPlayerData.WinScore,
+            WinRate = newPlayerData.WinRate,
+            PlayerRank = newPlayerData.PlayerRank,
+            LastUpdateTime = DateTime.UtcNow
+        };
+        SendPlayerSpawn(newSpawnPacket, clientEp);
+
         SendRoomList(packet, clientEp);
         //TryGetValue로 닉네임으로 이미 있는 정보인지 확인
         //새로운 정보면 ConcurrentDict에 추가
-        
+
         //나에게 다른 룸 정보(서버에 있는 리스트) 패킷(RoomUpdate) 전송
-        
+
     }
-    
+
     private void HandleDisconnection(PlayerPacket? disconnectionPacket, IPEndPoint clientEp)
     {
         if (disconnectionPacket == null)
@@ -289,24 +310,28 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버] HandleDisconnection 패킷이 없습니다!");
             return;
         }
-        
+
         //룸 리스트에 포함되어있는지 확인 -> 지우기 -> HandleExitRequest 실행하기
         if (_roomLists.TryGetValue(disconnectionPacket.RelatedRoomId, out var roomData))
         {
             Console.WriteLine($"[서버] {roomData.RoomId}번 방에서 {disconnectionPacket.PlayerName}를 삭제하였습니다.");
             HandleExitRequest(disconnectionPacket, clientEp);
         }
-        
-        //플레이어 리스트에 포함되어있는지 확인 -> 지우기 
+
+        //플레이어 리스트에 포함되어있는지 확인 -> 지우기
         if (_players.TryRemove(disconnectionPacket.PlayerId, out var playerData))
         {
             Console.WriteLine($"[서버] {playerData.PlayerName}을 _players에서 삭제하였습니다.");
-            
-        }
-        
-        //despawn패킷 보내기 -> 버튼들 다 삭제할 것임. 그리고 TCP, UDP Dispose할 것임.
 
-        SendDespawnPacket(clientEp);
+        }
+
+        //despawn패킷 보내기 -> 버튼들 다 삭제할 것임. 그리고 TCP, UDP Dispose할 것임.
+        PlayerPacket despawnPacket = new PlayerPacket
+        {
+            Type = LobbyPacketType.Despawn,
+            LastUpdateTime = DateTime.UtcNow,
+        };
+        SendDespawnPacket(despawnPacket, clientEp);
     }
 
 
@@ -318,20 +343,20 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버] HandleCreateRequestPacket : 방의 갯수가 20개를 초과합니다!");
             return;
         }
-        
+
         if (!_isRunning)
         {
             Console.WriteLine("[서버] HandleConnectionPacket : 연결되어 있지 않음");
             return;
         }
-        
+
         if (roomPacket == null)
         {
             Console.WriteLine("[서버]  HandleConnectionPacket : Packet is null!");
             return;
         }
-        
-        
+
+
         if (_players.TryGetValue(roomPacket.OwnerId, out PlayerData? playerData))
         {
             //룸 데이터 리스트에 저장
@@ -339,18 +364,35 @@ public class UdpServer:IDisposable
 
             RoomData newRoomData = new RoomData(roomPacket.OwnerId, roomId,
                 roomPacket.RoomName, roomPacket.RoomPlayerLimit, roomPacket.CurrentRoomPlayers);
-            
+
             playerData.PlayerWhereRoom(roomId);
             newRoomData.AddPlayer(playerData);
             _roomLists[roomId] = newRoomData;
-            
+
             // 룸 생성 패킷 브로드캐스팅
-            BroadcastCreateRoomPacket(newRoomData);
-        
-            SendEnterRoomPacket(playerData, clientEp);
+            RoomPacket createRoomPacket = new RoomPacket
+            {
+                Type = LobbyPacketType.CreateRoom,
+                OwnerId = newRoomData.OwnerId,
+                RoomId = newRoomData.RoomId,
+                RoomName = newRoomData.RoomName,
+                RoomPlayerLimit = newRoomData.RoomPlayerLimit,
+                CurrentRoomPlayers = newRoomData.CurrentRoomPlayers,
+                LastUpdateTime = DateTime.UtcNow
+            };
+            BroadcastCreateRoomPacket(createRoomPacket);
+
+            PlayerPacket enterRoomPacket = new PlayerPacket
+            {
+                Type = LobbyPacketType.EnterRoom,
+                PlayerId = playerData.PlayerId,
+                RelatedRoomId = playerData.RelatedRoomId,
+                LastUpdateTime = DateTime.UtcNow
+            };
+            SendEnterRoomPacket(enterRoomPacket, clientEp);
         }
     }
-    
+
     private void HandleEnterRequest(PlayerPacket? enterRequestPacket, IPEndPoint clientEp)
     {
         if (enterRequestPacket == null) return;
@@ -376,7 +418,14 @@ public class UdpServer:IDisposable
         playerData.PlayerWhereRoom(roomData.RoomId);
         roomData.AddPlayer(playerData);
 
-        SendEnterRoomPacket(playerData, clientEp);
+        PlayerPacket enterRoomPacket = new PlayerPacket
+        {
+            Type = LobbyPacketType.EnterRoom,
+            PlayerId = playerData.PlayerId,
+            RelatedRoomId = playerData.RelatedRoomId,
+            LastUpdateTime = DateTime.UtcNow
+        };
+        SendEnterRoomPacket(enterRoomPacket, clientEp);
         BroadcastUpdateRoomPacket(enterRequestPacket.RelatedRoomId);
     }
 
@@ -391,7 +440,18 @@ public class UdpServer:IDisposable
         }
 
         // 나를 제외한 방 안의 사람들에게 내 버튼을 추가하는 패킷 보내기
-        BroadcastAddPlayer(playerData);
+        PlayerPacket broadcastAddPlayerPacket = new PlayerPacket
+        {
+            Type = LobbyPacketType.AddPlayerRoom,
+            PlayerId = playerData.PlayerId,
+            PlayerName = playerData.PlayerName,
+            WinScore = playerData.WinScore,
+            WinRate = playerData.WinRate,
+            PlayerRank = playerData.PlayerRank,
+            RelatedRoomId = playerData.RelatedRoomId,
+            LastUpdateTime = DateTime.UtcNow
+        };
+        BroadcastAddPlayer(broadcastAddPlayerPacket);
         // 나에게 방 안 전체 플레이어 목록 전송
         SendAddPlayerPacket(playerData, clientEp);
     }
@@ -403,7 +463,7 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버] HandleExitRequest 패킷이 없습니다!");
             return;
         }
-        
+
         // _roomLists에서 패킷의 RelatedRoomId로 룸이 존재하는지 확인
         if (!_roomLists.TryGetValue(exitRequestPacket.RelatedRoomId, out RoomData? roomData))
         {
@@ -416,25 +476,36 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버] HandleExitRequest 룸 안에 플레이어가 존재하지 않습니다");
             return;
         }
-        
+
         // roomData.OwnerId == 패킷 PlayerId 이면 (방장이 나간 경우)
         //       → 방 안 모든 플레이어에게 DestroyRoom 패킷 브로드캐스팅
         //       → _roomLists에서 해당 룸 제거 후 종료
         if (roomData.OwnerId == playerData.PlayerId)
         {
-            BroadcastDestroyRoom(roomData, false);
+            RoomPacket destroyRoomPacket = new RoomPacket
+            {
+                Type = LobbyPacketType.DestroyRoom,
+                RoomId = roomData.RoomId,
+                LastUpdateTime = DateTime.UtcNow
+            };
+            BroadcastDestroyRoom(destroyRoomPacket, roomData, false);
         }
         else
         {
             _players[playerData.PlayerId].PlayerWhereRoom(0);
-            
+
             //일반 플레이어가 나간 경우
             //       → 나(clientEp)에게 ExitRoom 패킷 전송
-            SendExitRoomPacket(clientEp);
-            
+            PlayerPacket exitRoomPacket = new PlayerPacket
+            {
+                Type = LobbyPacketType.ExitRoom,
+                LastUpdateTime = DateTime.UtcNow
+            };
+            SendExitRoomPacket(exitRoomPacket, clientEp);
+
             //       → 방 안의 나머지 플레이어들에게 RemovePlayerRoom 패킷 브로드캐스팅
             BroadcastRemovePlayerRoomPacket(exitRequestPacket, clientEp);
-            
+
             //       → roomData.RemovePlayer(playerId)
             roomData.RemovePlayer(playerData.PlayerId);
 
@@ -442,7 +513,7 @@ public class UdpServer:IDisposable
             BroadcastUpdateRoomPacket(roomData.RoomId);
 
         }
-        
+
     }
 
     private void HandleGameStart(RoomPacket? gameStartPacket, IPEndPoint clientEp)
@@ -477,11 +548,17 @@ public class UdpServer:IDisposable
             return;
         }
 
-        SendGameStartPacket(roomData);
-        
+        RoomPacket gameStartResponsePacket = new RoomPacket
+        {
+            Type = LobbyPacketType.GameStart,
+            RoomId = roomData.RoomId,
+            LastUpdateTime = DateTime.UtcNow
+        };
+        SendGameStartPacket(gameStartResponsePacket, roomData);
+
         //BroadcastDestroyRoom(roomData, true);
     }
-    
+
     private void HandleGameReady(PlayerPacket? gameReadyPacket, IPEndPoint clientEp)
     {
         if (gameReadyPacket == null)
@@ -501,7 +578,7 @@ public class UdpServer:IDisposable
             Console.WriteLine($"[서버] HandleGameStart 해당하는 룸이 없습니다...");
             return;
         }
-        
+
         playerData.IsGameReady = true;
 
         foreach (var player in roomData.InRoomPlayers.Values)
@@ -510,7 +587,7 @@ public class UdpServer:IDisposable
         }
 
         InGameData newInGameData = new InGameData();
-        
+
         // 막타 친 애가 패킷 처리해야됨
         foreach (var player in roomData.InRoomPlayers.Values)
         {
@@ -528,12 +605,19 @@ public class UdpServer:IDisposable
                 PrefabIndex = newPlayerUnit.WeaponPrefabIndex,
                 LastUpdateTime = DateTime.UtcNow
             };
-            
+
             BroadcastSpawnPlayerUnitPacket(spawnPlayerUnitPacket, roomData.RoomId);
         }
-        
+
         _inGameDataList[roomData.RoomId] = newInGameData;
-        BroadcastDestroyRoom(roomData, true);
+
+        RoomPacket destroyRoomPacket = new RoomPacket
+        {
+            Type = LobbyPacketType.DestroyRoom,
+            RoomId = roomData.RoomId,
+            LastUpdateTime = DateTime.UtcNow
+        };
+        BroadcastDestroyRoom(destroyRoomPacket, roomData, true);
     }
 
     private void BroadcastSpawnPlayerUnitPacket(PlayerUnitPacket spawnPlayerUnitPacket, int roomDataRoomId)
@@ -555,47 +639,24 @@ public class UdpServer:IDisposable
     #endregion
 
     #region 패킷 송신 메서드
-    
-    private void SendPlayerSpawn(PlayerData playerData, IPEndPoint clientEp)
-    {
-        PlayerPacket playerPacket = new PlayerPacket
-        {
-            Type = LobbyPacketType.Spawn,
-            PlayerId = playerData.PlayerId,
-            PlayerName = playerData.PlayerName,
-            WinScore =  playerData.WinScore,
-            WinRate = playerData.WinRate,
-            PlayerRank = playerData.PlayerRank,
-            
-            LastUpdateTime = DateTime.UtcNow
-        };
-        
-        string json = JsonSerializer.Serialize(playerPacket);
-        // Console.WriteLine(json);
-        byte[] buffer = Encoding.UTF8.GetBytes(json);
-            
-        _socket.SendTo(buffer, clientEp);
-        
-        Console.WriteLine("[패킷 전송 완료]" + json );
-    }
-    
-    
-    private void SendDespawnPacket(IPEndPoint clientEp)
-    {
-        PlayerPacket despawnPacket = new PlayerPacket
-        {
-            Type = LobbyPacketType.Despawn,
-            LastUpdateTime = DateTime.UtcNow,
-        };
-        string json = JsonSerializer.Serialize(despawnPacket);
-       // Console.WriteLine(json);
-        byte[] buffer = Encoding.UTF8.GetBytes(json);
 
+    private void SendPlayerSpawn(PlayerPacket playerPacket, IPEndPoint clientEp)
+    {
+        string json = JsonSerializer.Serialize(playerPacket);
+        byte[] buffer = Encoding.UTF8.GetBytes(json);
         _socket.SendTo(buffer, clientEp);
-        
-        Console.WriteLine("[패킷 전송 완료]" + json );
+        Console.WriteLine("[패킷 전송 완료]" + json);
     }
-    
+
+
+    private void SendDespawnPacket(PlayerPacket despawnPacket, IPEndPoint clientEp)
+    {
+        string json = JsonSerializer.Serialize(despawnPacket);
+        byte[] buffer = Encoding.UTF8.GetBytes(json);
+        _socket.SendTo(buffer, clientEp);
+        Console.WriteLine("[패킷 전송 완료]" + json);
+    }
+
     private void SendRoomList(PlayerPacket packet, IPEndPoint clientEp)
     {
         int sentCount = 0;
@@ -612,35 +673,24 @@ public class UdpServer:IDisposable
                 LastUpdateTime = DateTime.UtcNow
 
             };
-            
+
             string json = JsonSerializer.Serialize(roomPacket);
             byte[] buffer = Encoding.UTF8.GetBytes(json);
             _socket?.SendTo(buffer, clientEp);
-            
+
             sentCount++;
 
         }
         Console.WriteLine($"[룸 데이터] {sentCount}개의 룸 데이터를 {packet.PlayerName}님에게 전달했습니다.");
-        
-    }
-    
-    private void SendEnterRoomPacket(PlayerData newPlayerData, IPEndPoint clientEp)
-    {
-        PlayerPacket enterRoomPacket = new PlayerPacket
-        {
-            Type = LobbyPacketType.EnterRoom,
-            PlayerId =  newPlayerData.PlayerId,
-            RelatedRoomId = newPlayerData.RelatedRoomId,
-            LastUpdateTime = DateTime.UtcNow
 
-        };
+    }
+
+    private void SendEnterRoomPacket(PlayerPacket enterRoomPacket, IPEndPoint clientEp)
+    {
         string json = JsonSerializer.Serialize(enterRoomPacket);
-        // Console.WriteLine(json);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
         _socket.SendTo(buffer, clientEp);
-            
-        Console.WriteLine("[패킷 전송 완료]" + json );
-        
+        Console.WriteLine("[패킷 전송 완료]" + json);
     }
 
     private void SendAddPlayerPacket(PlayerData newPlayerData, IPEndPoint clientEp)
@@ -673,32 +723,17 @@ public class UdpServer:IDisposable
             _socket?.SendTo(buffer, clientEp);
         }
     }
-    
-    private void SendExitRoomPacket(IPEndPoint clientEp)
+
+    private void SendExitRoomPacket(PlayerPacket exitRoomPacket, IPEndPoint clientEp)
     {
-        PlayerPacket exitRoomPacket = new PlayerPacket
-        {
-            Type = LobbyPacketType.ExitRoom,
-            LastUpdateTime = DateTime.UtcNow
-        };
         string json = JsonSerializer.Serialize(exitRoomPacket);
-        // Console.WriteLine(json);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
         _socket?.SendTo(buffer, clientEp);
-        
         Console.WriteLine("[서버] SendExitRoomPacket 패킷전달" + json);
     }
-    
-    private void SendGameStartPacket(RoomData roomData)
+
+    private void SendGameStartPacket(RoomPacket gameStartResponsePacket, RoomData roomData)
     {
-        RoomPacket gameStartResponsePacket = new RoomPacket
-        {
-            Type = LobbyPacketType.GameStart,
-            RoomId = roomData.RoomId,
-            LastUpdateTime = DateTime.UtcNow
-        };
-        
-        
         string json = JsonSerializer.Serialize(gameStartResponsePacket);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
         int sentCount = 0;
@@ -713,22 +748,10 @@ public class UdpServer:IDisposable
     #endregion
 
     #region 브로드캐스팅
-    
-    private void BroadcastCreateRoomPacket(RoomData newRoomData)
+
+    private void BroadcastCreateRoomPacket(RoomPacket broadcastPacket)
     {
-        RoomPacket broadcastPacket = new RoomPacket
-        {
-            Type = LobbyPacketType.CreateRoom,
-            OwnerId = newRoomData.OwnerId,
-            RoomId = newRoomData.RoomId,
-            RoomName = newRoomData.RoomName,
-            RoomPlayerLimit = newRoomData.RoomPlayerLimit,
-            CurrentRoomPlayers = newRoomData.CurrentRoomPlayers,
-            LastUpdateTime = DateTime.UtcNow
-        };
-        
         string json = JsonSerializer.Serialize(broadcastPacket);
-        // Console.WriteLine(json);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
         int sentCount = 0;
         foreach (PlayerData playerData in _players.Values)
@@ -736,41 +759,29 @@ public class UdpServer:IDisposable
             _socket.SendTo(buffer, playerData.ClientEp);
             sentCount++;
         }
-        
-        Console.WriteLine($"[서버] BroadcastCreateRoomPacketAsync: {sentCount}명의 " +
-                          $"플레이어에게 새로운 룸{newRoomData.RoomId} 정보 브로드캐스트 완료" + json);
-    }
-    
-    private void BroadcastAddPlayer(PlayerData newPlayerData)
-    {
-        if (!_roomLists.TryGetValue(newPlayerData.RelatedRoomId, out RoomData? roomData)) return;
 
-        // 패킷은 한 번만 직렬화
-        PlayerPacket addPlayerPacket = new PlayerPacket
-        {
-            Type = LobbyPacketType.AddPlayerRoom,
-            PlayerId = newPlayerData.PlayerId,
-            PlayerName = newPlayerData.PlayerName,
-            WinScore = newPlayerData.WinScore,
-            WinRate = newPlayerData.WinRate,
-            PlayerRank = newPlayerData.PlayerRank,
-            RelatedRoomId = newPlayerData.RelatedRoomId,
-            LastUpdateTime = DateTime.UtcNow
-        };
+        Console.WriteLine($"[서버] BroadcastCreateRoomPacketAsync: {sentCount}명의 " +
+                          $"플레이어에게 새로운 룸{broadcastPacket.RoomId} 정보 브로드캐스트 완료" + json);
+    }
+
+    private void BroadcastAddPlayer(PlayerPacket addPlayerPacket)
+    {
+        if (!_roomLists.TryGetValue(addPlayerPacket.RelatedRoomId, out RoomData? roomData)) return;
+
         int sentCount = 0;
         string json = JsonSerializer.Serialize(addPlayerPacket);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
 
         foreach (var inRoomPlayer in roomData.InRoomPlayers.Values)
         {
-            if (inRoomPlayer.PlayerId != newPlayerData.PlayerId)
+            if (inRoomPlayer.PlayerId != addPlayerPacket.PlayerId)
             {
                 sentCount++;
                 _socket?.SendTo(buffer, inRoomPlayer.ClientEp);
             }
         }
         Console.WriteLine($"[서버] BroadcastAddPlayer: {sentCount}명의 " +
-                          $"플레이어에게 새로운 플레이어{newPlayerData.PlayerName} 정보 브로드캐스트 완료" + json);
+                          $"플레이어에게 새로운 플레이어{addPlayerPacket.PlayerName} 정보 브로드캐스트 완료" + json);
     }
 
     private void BroadcastUpdateRoomPacket(int roomId)
@@ -787,7 +798,7 @@ public class UdpServer:IDisposable
                 CurrentRoomPlayers = roomData.CurrentRoomPlayers,
                 LastUpdateTime = DateTime.UtcNow
             };
-            
+
             string json = JsonSerializer.Serialize(roomUpdatePacket);
             Console.WriteLine(json);
             byte[] buffer = Encoding.UTF8.GetBytes(json);
@@ -799,7 +810,7 @@ public class UdpServer:IDisposable
             Console.WriteLine($"[서버] BroadcastUpdateRoomPacket: 룸 업데이트 정보 브로드캐스트 완료" + json);
         }
     }
-    
+
     private void BroadcastRemovePlayerRoomPacket(PlayerPacket exitRequestPacket, IPEndPoint clientEp)
     {
         int sentCount = 0;
@@ -825,7 +836,7 @@ public class UdpServer:IDisposable
         string json =  JsonSerializer.Serialize(removePlayerPacket);
         Console.WriteLine(json);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
-        
+
         foreach (var inRoomPlayer in roomData.InRoomPlayers.Values)
         {
             if (!inRoomPlayer.ClientEp.Equals(clientEp))
@@ -837,16 +848,10 @@ public class UdpServer:IDisposable
         Console.WriteLine($"[서버] BroadcastRemovePlayerRoomPacket " +
                           $": {sentCount}명의 플레이어에게 {playerData.PlayerName} RemovePlayer 패킷을 날렸습니다." + json);
     }
-    
-    private void BroadcastDestroyRoom(RoomData roomData, bool isGameStart)
+
+    private void BroadcastDestroyRoom(RoomPacket destroyRoomPacket, RoomData roomData, bool isGameStart)
     {
         int sentCount = 0;
-        RoomPacket destroyRoomPacket = new RoomPacket
-        {
-            Type = LobbyPacketType.DestroyRoom,
-            RoomId = roomData.RoomId,
-            LastUpdateTime = DateTime.UtcNow
-        };
         string json = JsonSerializer.Serialize(destroyRoomPacket);
         byte[] buffer = Encoding.UTF8.GetBytes(json);
 
@@ -854,7 +859,7 @@ public class UdpServer:IDisposable
         {
             inRoomPlayer.PlayerWhereRoom(0);
         }
-            
+
         foreach (var player in _players.Values)
         {
             if (isGameStart)
@@ -870,7 +875,7 @@ public class UdpServer:IDisposable
                 _socket.SendTo(buffer, player.ClientEp);
                 sentCount++;
             }
-            
+
         }
         Console.WriteLine($"[서버] {roomData.RoomName} 방의 {sentCount}명의 " +
                           $"인원에게 DestroyRoom 패킷을 보냈습니다.");
@@ -879,10 +884,10 @@ public class UdpServer:IDisposable
             Console.WriteLine($"[서버] {roomData.RoomName} 방을 삭제하였습니다.");
         }
     }
-    
+
     #endregion
-    
-    
+
+
 
     public void Dispose()
     {
@@ -891,11 +896,11 @@ public class UdpServer:IDisposable
         _socket.Dispose();
         _players.Clear();
         _roomLists.Clear();
-        
+
         _nextPlayerId = 0;
         _nextRoomId = 0;
-        
+
         _disposed = true;
-        
+
     }
 }
