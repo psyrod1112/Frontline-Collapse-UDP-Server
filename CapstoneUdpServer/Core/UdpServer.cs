@@ -24,12 +24,13 @@ public class UdpServer:IDisposable
     private const int WORKER_THREAD_COUNT = 10;
 
     private JobQueue _jobQueue = new JobQueue();
-    private ConcurrentDictionary<int, PlayerData> _players;
+    //private ConcurrentDictionary<int, PlayerData> _players;
     private ConcurrentDictionary<int, RoomData> _roomLists;
 
     private int _nextPlayerId;
     private int _nextRoomId;
     private bool _disposed;
+    private int _currentPlayerCounts;
     public bool IsRunning => _isRunning;
     
 
@@ -42,7 +43,7 @@ public class UdpServer:IDisposable
         _config = config;
         _isRunning = false;
         _inGameDataList = new ConcurrentDictionary<int, InGameData>();
-        _players = new ConcurrentDictionary<int, PlayerData>();
+        //_players = new ConcurrentDictionary<int, PlayerData>();
         _roomLists = new ConcurrentDictionary<int, RoomData>();
 
         _nextPlayerId = 0;
@@ -234,7 +235,7 @@ public class UdpServer:IDisposable
 
     #region 핸들러 메소드
 
-    private void HandleConnection(PlayerPacket? packet, IPEndPoint clientEp)
+    private async void HandleConnection(PlayerPacket? packet, IPEndPoint clientEp)
     {
         //예외상황 처리
         if (!_isRunning)
@@ -243,7 +244,7 @@ public class UdpServer:IDisposable
             return;
         }
 
-        if (_players.Count > _config.MaxPlayerCounts)
+        if (_currentPlayerCounts > _config.MaxPlayerCounts)
         {
             Console.WriteLine("[서버] HandleConnectionPacket : 서버 인원 초과!");
             return;
@@ -254,58 +255,32 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버]  HandleConnectionPacket : Packet is null!");
             return;
         }
-        
-        int playerId = Interlocked.Increment(ref _nextPlayerId);
-        foreach(var playerData in _players.Values)
+
+        Redis_players? playerData = await _dbManager.SearchPlayerFromDB(packet.PlayerName);
+        if (playerData != null)
         {
-            if (playerData.PlayerName.Equals(packet.PlayerName))
+            PlayerPacket spawnPacket = new PlayerPacket
             {
-                Console.WriteLine("[서버]  HandleConnectionPacket: 이미 한번 접속했던 유저! " + playerData.PlayerName);
-                Interlocked.Decrement(ref _nextPlayerId);
+                Type = LobbyPacketType.Spawn,
+                PlayerId = playerData.Player_id,
+                PlayerName = packet.PlayerName,
+                WinScore = playerData.Win_score,
+                WinRate = playerData.Win_rate,
+                PlayerRank = playerData.Player_rank,
+                LastUpdateTime = DateTime.UtcNow
+            };
+            SendPlayerSpawn(spawnPacket, clientEp);
 
-                PlayerPacket spawnPacket = new PlayerPacket
-                {
-                    Type = LobbyPacketType.Spawn,
-                    PlayerId = playerData.PlayerId,
-                    PlayerName = playerData.PlayerName,
-                    WinScore = playerData.WinScore,
-                    WinRate = playerData.WinRate,
-                    PlayerRank = playerData.PlayerRank,
-                    LastUpdateTime = DateTime.UtcNow
-                };
-                SendPlayerSpawn(spawnPacket, clientEp);
+            SendRoomList(packet, clientEp);
 
-                SendRoomList(packet, clientEp);
-
-                return;
-            }
         }
-
-        //새 유저 만들기
-        PlayerData newPlayerData = new PlayerData(packet.PlayerName, playerId,0 ,0f, PlayerRank.Sergeant, clientEp);
-        _players[playerId] = newPlayerData;
-        Console.WriteLine($"[서버] HandleConnectionPacket {packet.PlayerName} 플레이어 접속 완료!");
-
-        Console.WriteLine($"packet.PlayerName : {packet.PlayerName}");
-        Console.WriteLine($"packetData : {newPlayerData}");
-
-        PlayerPacket newSpawnPacket = new PlayerPacket
+        else
         {
-            Type = LobbyPacketType.Spawn,
-            PlayerId = newPlayerData.PlayerId,
-            PlayerName = newPlayerData.PlayerName,
-            WinScore = newPlayerData.WinScore,
-            WinRate = newPlayerData.WinRate,
-            PlayerRank = newPlayerData.PlayerRank,
-            LastUpdateTime = DateTime.UtcNow
-        };
-        SendPlayerSpawn(newSpawnPacket, clientEp);
+            return;
+        }
+        
+        Interlocked.Increment(ref _currentPlayerCounts);
 
-        SendRoomList(packet, clientEp);
-        //TryGetValue로 닉네임으로 이미 있는 정보인지 확인
-        //새로운 정보면 ConcurrentDict에 추가
-
-        //나에게 다른 룸 정보(서버에 있는 리스트) 패킷(RoomUpdate) 전송
 
     }
 
