@@ -1,20 +1,22 @@
 
-using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
+using CapstoneUdpServer.Core;
 using CapstoneUdpServer.Data;
+using CapstoneUdpServer.Network;
 using CapstoneUdpServer.NetworkStream;
 
-namespace CapstoneUdpServer.Network;
+namespace CapstoneUdpServer.Core;
 
 public class UdpServer:IDisposable
 {
+
+    private DbManager _dbManager;
+    
     private Socket _socket;
     private ServerConfig _config;
     private bool _isRunning;
@@ -29,6 +31,7 @@ public class UdpServer:IDisposable
     private int _nextRoomId;
     private bool _disposed;
     public bool IsRunning => _isRunning;
+    
 
     private ConcurrentDictionary<int, InGameData> _inGameDataList;
 
@@ -52,8 +55,12 @@ public class UdpServer:IDisposable
 
     #region 시작 메서드
 
-    public void Initialize()
+    public async void Initialize()
     {
+        _dbManager = new DbManager();
+        await _dbManager.ConnectDBAsync();
+        await _dbManager.ConnectRedisAsync();
+        
         //소켓 초기화
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         //소켓 옵션 설정
@@ -63,7 +70,6 @@ public class UdpServer:IDisposable
         _socket.Bind(serverEp);
 
         Console.WriteLine("[서버] Initialize: 소켓 초기 설정 완료");
-
     }
 
     public async Task StartAsync()
@@ -248,7 +254,7 @@ public class UdpServer:IDisposable
             Console.WriteLine("[서버]  HandleConnectionPacket : Packet is null!");
             return;
         }
-
+        
         int playerId = Interlocked.Increment(ref _nextPlayerId);
         foreach(var playerData in _players.Values)
         {
@@ -893,6 +899,8 @@ public class UdpServer:IDisposable
     {
         if (_disposed) return;
         _isRunning = false;
+        
+        _dbManager.Dispose();
         _socket.Dispose();
         _players.Clear();
         _roomLists.Clear();
