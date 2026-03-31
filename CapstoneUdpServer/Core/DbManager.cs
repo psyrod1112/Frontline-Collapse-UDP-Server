@@ -6,7 +6,7 @@ namespace CapstoneUdpServer.Core;
 
 #region DB 받아올 타입 클래스
 
-public class players
+public class DB_players
 {
     public int Player_id { get; set; }
     public string Player_name { get; set; }
@@ -15,7 +15,7 @@ public class players
     public PlayerRank Player_rank { get; set; }
     public DateTimeOffset Created_at { get; set; }
 
-    public players(int player_id, string player_name, int win_score, float win_rate, PlayerRank player_rank,
+    public DB_players(int player_id, string player_name, int win_score, float win_rate, PlayerRank player_rank,
         DateTimeOffset created_at)
     {
         Player_id = player_id;
@@ -23,6 +23,24 @@ public class players
         Win_score = win_score;
         Win_rate = win_rate;
         Player_rank = player_rank;
+        Created_at = created_at;
+    }
+}
+
+public class DB_gamelogs
+{
+    public int Log_id { get; set; }
+    public int Player_id { get; set; }
+    public int Enemy_id { get; set; }
+    public bool Game_result { get; set; }
+    public DateTimeOffset Created_at { get; set; }
+
+    public DB_gamelogs(int log_id, int player_id, int enemy_id, bool game_result, DateTimeOffset created_at)
+    {
+        Log_id = log_id;
+        Player_id = player_id;
+        Enemy_id = enemy_id;
+        Game_result = game_result;
         Created_at = created_at;
     }
 }
@@ -43,23 +61,7 @@ public class Redis_players
     }
 }
 
-public class gamelogs
-{
-    public int Log_id { get; set; }
-    public int Player_id { get; set; }
-    public int Enemy_id { get; set; }
-    public bool Game_result { get; set; }
-    public DateTimeOffset Created_at { get; set; }
 
-    public gamelogs(int log_id, int player_id, int enemy_id, bool game_result, DateTimeOffset created_at)
-    {
-        Log_id = log_id;
-        Player_id = player_id;
-        Enemy_id = enemy_id;
-        Game_result = game_result;
-        Created_at = created_at;
-    }
-}
 
 #endregion
 
@@ -119,7 +121,7 @@ public class DbManager : IDisposable
     {
         try
         {
-            if (await _db.KeyExistsAsync($"player:{playerName}"))
+            if (await _db.KeyExistsAsync($"players:{playerName}"))
             {
                 // 캐시 히트: Redis에서 바로 반환
                 Console.WriteLine($"[DbManager] SearchPlayerFromDB: {playerName} Redis 캐시 히트");
@@ -128,7 +130,7 @@ public class DbManager : IDisposable
             else
             {
                 // 캐시 미스: DB 조회
-                players? playerDBData = await SelectPlayerFromDataSource(playerName);
+                DB_players? playerDBData = await SelectPlayerFromDataSource(playerName);
                 if (playerDBData == null)
                 {
                     // DB에도 없으면 신규 플레이어 INSERT
@@ -152,10 +154,11 @@ public class DbManager : IDisposable
             return null;
         }
     }
+    
 
     // DB players 테이블에서 player_name으로 단건 조회
     // 나중에 인룸 플레이어 정보 가져오거나, 플레이어 전적 패킷 받을 때 DB만 접근해야되서 빼놓음
-    public async Task<players?> SelectPlayerFromDataSource(string playerName)
+    public async Task<DB_players?> SelectPlayerFromDataSource(string playerName)
     {
         try
         {
@@ -167,8 +170,8 @@ public class DbManager : IDisposable
             if (await reader.ReadAsync())
             {
                 Console.WriteLine($"[DbManager] SelectPlayerFromDataSource: {playerName} DB 조회 성공");
-                return new players(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2), reader.GetFloat(3),
-                    (PlayerRank)reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5));
+                return new DB_players(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2), 
+                    reader.GetFloat(3), (PlayerRank)reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5));
             }
 
             Console.WriteLine($"[DbManager] SelectPlayerFromDataSource: {playerName} DB에 존재하지 않음");
@@ -182,7 +185,7 @@ public class DbManager : IDisposable
     }
 
     // DB players 테이블에 신규 플레이어 INSERT, 생성된 player_id 반환
-    public async Task<int> InsertPlayerFromDataSource(string playerName)
+    private async Task InsertPlayerFromDataSource(string playerName)
     {
         try
         {
@@ -192,17 +195,38 @@ public class DbManager : IDisposable
 
             int newPlayerId = (int)await cmd.ExecuteScalarAsync();
             Console.WriteLine($"[DbManager] InsertPlayerFromDataSource: {playerName} INSERT 완료 (player_id={newPlayerId})");
-            return newPlayerId;
         }
         catch (Exception e)
         {
             Console.WriteLine($"[DbManager] InsertPlayerFromDataSource: 오류 발생 {e.Message}");
-            return -1;
         }
     }
 
+    public async Task<List<DB_gamelogs>> ShowGamelogsFromDataSource(int playerId)
+    {
+        var selectedLogList = new List<DB_gamelogs>();
+        
+        await using var cmd = _dataSource?.CreateCommand(
+            "SELECT log_id, player_id, enemy_id, game_result, created_at FROM gamelogs WHERE player_id = @player_id");
+
+        cmd.Parameters.AddWithValue("player_id", playerId);
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            DB_gamelogs? gamelog = new DB_gamelogs(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), 
+                reader.GetBoolean(3), reader.GetFieldValue<DateTimeOffset>(4));
+            
+            selectedLogList.Add(gamelog);
+        }
+        
+        return selectedLogList;
+    }
+    
+    
+
     // Redis Hash에서 플레이어 데이터 조회 후 Redis_players로 변환
-    private async Task<Redis_players?> SearchPlayerFromRedis(string playerName)
+    public async Task<Redis_players?> SearchPlayerFromRedis(string playerName)
     {
         HashEntry[] entries = await _db.HashGetAllAsync($"player:{playerName}");
 
@@ -217,9 +241,10 @@ public class DbManager : IDisposable
         Console.WriteLine($"[DbManager] SearchPlayerFromRedis: player_id={playerId} 데이터 반환");
         return new Redis_players(playerId, winScore, winRate, rank);
     }
+    
 
     // DB에서 가져온 players 데이터를 Redis Hash로 캐싱 (TTL 1시간)
-    private async Task CachingPlayerToRedis(players? playerDbData)
+    private async Task CachingPlayerToRedis(DB_players? playerDbData)
     {
         await _db?.HashSetAsync($"player:{playerDbData?.Player_name}", new HashEntry[]
             {

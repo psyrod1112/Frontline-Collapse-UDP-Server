@@ -28,6 +28,11 @@ public enum LobbyPacketType
     ExitRequest,
     ExitRoom,
     RoomUpdate,
+    
+    //전적 관련
+    ShowGamelogsRequest,
+    ShowPlayerInfo,
+    ShowGamelogsResponse,
 
     //게임 관련
     GameStart,
@@ -68,6 +73,15 @@ public class RoomPacket : BasePacket
     public string? RoomName { get; set; }
     public int RoomPlayerLimit { get; set; }
     public int CurrentRoomPlayers { get; set; }
+}
+
+public class GamelogPacket : BasePacket
+{
+    public int LogId { get; set; }
+    public int PlayerId { get; set; }
+    public int EnemyId  { get; set; }
+    public bool GameResult { get; set; }
+    public DateTimeOffset GameOverTime { get; set; }
 }
 
 #endregion
