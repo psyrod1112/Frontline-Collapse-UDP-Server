@@ -78,8 +78,15 @@ public class RoomPacket : BasePacket
 public class GamelogPacket : BasePacket
 {
     public int LogId { get; set; }
-    public int PlayerId { get; set; }
+    
+    public int MyId { get; set; }
+    public string MyName { get; set; }
+    public PlayerRank MyRank { get; set; }
+    
     public int EnemyId  { get; set; }
+    public string EnemyName  { get; set; }
+    public PlayerRank EnemyRank  { get; set; }
+    
     public bool GameResult { get; set; }
     public DateTimeOffset GameOverTime { get; set; }
 }

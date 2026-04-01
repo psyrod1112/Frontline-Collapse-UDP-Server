@@ -11,7 +11,7 @@ public class ServerConfig
     public ServerConfig()
     {
         ServerIp = "127.0.0.1";
-        Port = 7777;
+        Port = 8888;
         MaxPlayerCounts = 100;
         BufferSize = 1024;
     }

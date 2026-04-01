@@ -1,6 +1,4 @@
-﻿
-using System;
-using System.Threading.Tasks;
+
 using CapstoneUdpServer.Network;
 
 namespace CapstoneUdpServer.Core;
@@ -13,7 +11,11 @@ class Program
         {
             ServerConfig config = new ServerConfig();
             UdpServer server = new UdpServer(config);
-            server.Initialize();
+            if (!await server.Initialize())
+            {
+                Console.WriteLine("[서버] Initialize 오류 발생! 강제종료");
+                return;
+            }
 
             await Task.Run(server.StartAsync);
         }
@@ -21,6 +23,6 @@ class Program
         {
             Console.WriteLine("[서버] Main 함수 오류! " + e.Message);
         }
-        
+
     }
 }

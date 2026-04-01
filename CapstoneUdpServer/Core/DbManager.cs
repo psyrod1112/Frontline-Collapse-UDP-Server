@@ -27,22 +27,46 @@ public class DB_players
     }
 }
 
-public class DB_gamelogs
+// public class DB_gamelogs
+// {
+//     public int Log_id { get; set; }
+//     public int Player_id { get; set; }
+//     public int Enemy_id { get; set; }
+//     public bool Game_result { get; set; }
+//     public DateTimeOffset Created_at { get; set; }
+//
+//     public DB_gamelogs(int log_id, int player_id, int enemy_id, bool game_result, DateTimeOffset created_at)
+//     {
+//         Log_id = log_id;
+//         Player_id = player_id;
+//         Enemy_id = enemy_id;
+//         Game_result = game_result;
+//         Created_at = created_at;
+//     }
+// }
+
+public class DB_playersNgamelogsJoined
 {
-    public int Log_id { get; set; }
-    public int Player_id { get; set; }
-    public int Enemy_id { get; set; }
+    public string Player_Name { get; set; }
+    public PlayerRank Player_Rank { get; set; }
+    public string Enemy_Name { get; set; }
+    public PlayerRank Enemy_rank { get; set; }
+    
     public bool Game_result { get; set; }
     public DateTimeOffset Created_at { get; set; }
 
-    public DB_gamelogs(int log_id, int player_id, int enemy_id, bool game_result, DateTimeOffset created_at)
+    public DB_playersNgamelogsJoined(string playerName, int playerRank, string enemyName, int enemyRank,
+        bool gameResult, DateTimeOffset created_at)
     {
-        Log_id = log_id;
-        Player_id = player_id;
-        Enemy_id = enemy_id;
-        Game_result = game_result;
+        Player_Name = playerName;
+        Player_Rank = (PlayerRank)playerRank;
+        Enemy_Name = enemyName;
+        Enemy_rank = (PlayerRank)enemyRank;
+        Game_result = gameResult;
         Created_at = created_at;
     }
+    
+    
 }
 
 public class Redis_players
@@ -121,7 +145,7 @@ public class DbManager : IDisposable
     {
         try
         {
-            if (await _db.KeyExistsAsync($"players:{playerName}"))
+            if (await _db.KeyExistsAsync($"player:{playerName}"))
             {
                 // 캐시 히트: Redis에서 바로 반환
                 Console.WriteLine($"[DbManager] SearchPlayerFromDB: {playerName} Redis 캐시 히트");
@@ -202,24 +226,27 @@ public class DbManager : IDisposable
         }
     }
 
-    public async Task<List<DB_gamelogs>> ShowGamelogsFromDataSource(int playerId)
+    public async Task<List<DB_playersNgamelogsJoined>> ShowGamelogsFromDataSource(int playerId)
     {
-        var selectedLogList = new List<DB_gamelogs>();
+        var selectedLogList = new List<DB_playersNgamelogsJoined>();
         
         await using var cmd = _dataSource?.CreateCommand(
-            "SELECT log_id, player_id, enemy_id, game_result, created_at FROM gamelogs WHERE player_id = @player_id");
+            "SELECT \n    p1.player_name AS my_name,\n    p1.player_rank AS my_rank,\n    p2.player_name AS enemy_name,\n    " +
+            "p2.player_rank AS enemy_rank, \n    g.game_result AS gameResult,\n    g.created_at AS gameoverTime\nFROM gamelogs g\nJOIN players p1 " +
+            "ON g.player_id = p1.player_id\nJOIN players p2 ON g.enemy_id = p2.player_id\nWHERE g.player_id = @player_id\n" +
+            "ORDER BY g.created_at DESC\nLIMIT 10;");
 
         cmd.Parameters.AddWithValue("player_id", playerId);
 
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            DB_gamelogs? gamelog = new DB_gamelogs(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), 
-                reader.GetBoolean(3), reader.GetFieldValue<DateTimeOffset>(4));
+            DB_playersNgamelogsJoined? gamelog = new DB_playersNgamelogsJoined(reader.GetString(0), reader.GetInt32(1),  reader.GetString(2),
+                reader.GetInt32(3), reader.GetBoolean(4),reader.GetFieldValue<DateTimeOffset>(5));
             
             selectedLogList.Add(gamelog);
         }
-        
+        Console.WriteLine($"[DbManager] ShowGamelogsFromDataSource: playerId={playerId} 조회 완료 ({selectedLogList.Count}건)");
         return selectedLogList;
     }
     
@@ -261,6 +288,7 @@ public class DbManager : IDisposable
     #endregion
 
 
+    //ShowGamelogsFromDataSource 랑 
 
     public void Dispose()
     {

@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using CapstoneUdpServer.Core;
 using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
 using CapstoneUdpServer.NetworkStream;
@@ -56,21 +55,37 @@ public class UdpServer:IDisposable
 
     #region 시작 메서드
 
-    public async void Initialize()
+    public async Task<bool> Initialize()
     {
-        _dbManager = new DbManager();
-        await _dbManager.ConnectDBAsync();
-        await _dbManager.ConnectRedisAsync();
-        
-        //소켓 초기화
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        //소켓 옵션 설정
-        _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-        //소켓 바인딩
-        IPEndPoint serverEp = new IPEndPoint(IPAddress.Parse(_config.ServerIp), _config.Port);
-        _socket.Bind(serverEp);
+        try
+        {
+            _dbManager = new DbManager();
+            bool isDBConnected = await _dbManager.ConnectDBAsync();
+            bool isRedisConnected = await _dbManager.ConnectRedisAsync();
+            if (!isRedisConnected || !isDBConnected)
+            {
+                Console.WriteLine("[서버] DB 연결 중 오류가 있습니다.");
+                return false;
+            }
 
-        Console.WriteLine("[서버] Initialize: 소켓 초기 설정 완료");
+            //소켓 초기화
+            _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            //소켓 옵션 설정
+            _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            //소켓 바인딩
+            IPEndPoint serverEp = new IPEndPoint(IPAddress.Parse(_config.ServerIp), _config.Port);
+            _socket.Bind(serverEp);
+            
+
+            Console.WriteLine("[서버] Initialize: 소켓 초기 설정 완료");
+            return true;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"[서버] Initialize: 초기 설정 실패 {e.Message}");
+            return false;
+        }
+        
     }
 
     public async Task StartAsync()
@@ -232,9 +247,6 @@ public class UdpServer:IDisposable
         }
 
         //예외상황?
-
-
-
     }
 
 
@@ -551,17 +563,20 @@ public class UdpServer:IDisposable
             var gamelogLists = await _dbManager.ShowGamelogsFromDataSource(playerData.PlayerId);
             foreach (var gamelog in gamelogLists)
             {
+                
+                //하나의 playername에 대해서 DB조회
+                
                 GamelogPacket newGamelogPacket = new GamelogPacket
                 {
                     Scene = PacketScene.Lobby,
                     Type = LobbyPacketType.ShowGamelogsResponse,
                     LastUpdateTime = DateTime.UtcNow,
 
-                    LogId = gamelog.Log_id,
-                    PlayerId = gamelog.Player_id,
-
-                    EnemyId = gamelog.Enemy_id,
-                    GameResult = gamelog.Game_result,
+                    MyName = gamelog.Player_Name,
+                    MyRank = gamelog.Player_Rank,
+                    EnemyName = gamelog.Enemy_Name,
+                    EnemyRank = gamelog.Enemy_rank,
+                    GameResult =  gamelog.Game_result,
                     GameOverTime = gamelog.Created_at
                 };
                 
