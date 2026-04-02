@@ -196,7 +196,7 @@ public class UdpServer:IDisposable
                 {
                     case LobbyPacketType.Connection:
                         PlayerPacket? connectionPacket = JsonSerializer.Deserialize<PlayerPacket>(jsonData);
-                        HandleConnection(connectionPacket, clientEp);
+                        _ = HandleConnection(connectionPacket, clientEp);
                         break;
                     case LobbyPacketType.Disconnection:
                         PlayerPacket? disconnectionPacket = JsonSerializer.Deserialize<PlayerPacket>(jsonData);
@@ -230,6 +230,10 @@ public class UdpServer:IDisposable
                         PlayerPacket? gameReadyPacket = JsonSerializer.Deserialize<PlayerPacket>(jsonData);
                         HandleGameReady(gameReadyPacket, clientEp);
                         break;
+                    case LobbyPacketType.GameOver:
+                        GamelogPacket? gameOverPacket = JsonSerializer.Deserialize<GamelogPacket>(jsonData);
+                        _ = HandleGameOver(gameOverPacket, clientEp);
+                        break;
                 }
 
                 break;
@@ -249,10 +253,9 @@ public class UdpServer:IDisposable
         //예외상황?
     }
 
-
     #region 핸들러 메소드
 
-    private async void HandleConnection(PlayerPacket? packet, IPEndPoint clientEp)
+    private async Task HandleConnection(PlayerPacket? packet, IPEndPoint clientEp)
     {
         //예외상황 처리
         if (!_isRunning)
@@ -284,7 +287,7 @@ public class UdpServer:IDisposable
                 WinScore = playerData.Win_score,
                 WinRate = playerData.Win_rate,
                 PlayerRank = playerData.Player_rank,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
             
             _players[playerData.Player_id] = new PlayerData(packet.PlayerName, playerData.Player_id, clientEp);
@@ -330,7 +333,7 @@ public class UdpServer:IDisposable
         PlayerPacket despawnPacket = new PlayerPacket
         {
             Type = LobbyPacketType.Despawn,
-            LastUpdateTime = DateTime.UtcNow,
+            LastUpdateTime = DateTime.UtcNow.ToString("o"),
         };
         Send(despawnPacket, clientEp);
     }
@@ -379,7 +382,7 @@ public class UdpServer:IDisposable
                 RoomName = newRoomData.RoomName,
                 RoomPlayerLimit = newRoomData.RoomPlayerLimit,
                 CurrentRoomPlayers = newRoomData.CurrentRoomPlayers,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
             BroadcastCreateRoomPacket(createRoomPacket);
 
@@ -388,7 +391,7 @@ public class UdpServer:IDisposable
                 Type = LobbyPacketType.EnterRoom,
                 PlayerId = playerData.PlayerId,
                 RelatedRoomId = playerData.RelatedRoomId,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
             Send(enterRoomPacket, clientEp);
         }
@@ -424,7 +427,7 @@ public class UdpServer:IDisposable
             Type = LobbyPacketType.EnterRoom,
             PlayerId = playerData.PlayerId,
             RelatedRoomId = playerData.RelatedRoomId,
-            LastUpdateTime = DateTime.UtcNow
+            LastUpdateTime = DateTime.UtcNow.ToString("o")
         };
         Send(enterRoomPacket, clientEp);
         BroadcastUpdateRoomPacket(enterRequestPacket.RelatedRoomId);
@@ -457,7 +460,7 @@ public class UdpServer:IDisposable
             WinRate = playerInfo.Win_rate,
             PlayerRank = playerInfo.Player_rank,
             RelatedRoomId = playerData.RelatedRoomId,
-            LastUpdateTime = DateTime.UtcNow
+            LastUpdateTime = DateTime.UtcNow.ToString("o")
         };
         BroadcastAddPlayer(broadcastAddPlayerPacket);
         // 나에게 방 안 전체 플레이어 목록 전송
@@ -494,7 +497,7 @@ public class UdpServer:IDisposable
             {
                 Type = LobbyPacketType.DestroyRoom,
                 RoomId = roomData.RoomId,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
             BroadcastDestroyRoom(destroyRoomPacket, roomData, false);
         }
@@ -507,7 +510,7 @@ public class UdpServer:IDisposable
             PlayerPacket exitRoomPacket = new PlayerPacket
             {
                 Type = LobbyPacketType.ExitRoom,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
             Send(exitRoomPacket, clientEp);
 
@@ -547,7 +550,7 @@ public class UdpServer:IDisposable
             {
                 Scene = PacketScene.Lobby,
                 Type = LobbyPacketType.ShowPlayerInfo,
-                LastUpdateTime = DateTime.UtcNow,
+                LastUpdateTime = DateTime.UtcNow.ToString("o"),
 
                 PlayerId = searchingPlayer.Player_id,
                 PlayerName = playerData.PlayerName,
@@ -560,7 +563,7 @@ public class UdpServer:IDisposable
             Send(playerInfoPacket, clientEp);
             
             
-            var gamelogLists = await _dbManager.ShowGamelogsFromDataSource(playerData.PlayerId);
+            var gamelogLists = await _dbManager.ShowGamelogsFromDataSource(playerData.PlayerName);
             foreach (var gamelog in gamelogLists)
             {
                 
@@ -570,7 +573,7 @@ public class UdpServer:IDisposable
                 {
                     Scene = PacketScene.Lobby,
                     Type = LobbyPacketType.ShowGamelogsResponse,
-                    LastUpdateTime = DateTime.UtcNow,
+                    LastUpdateTime = DateTime.UtcNow.ToString("o"),
 
                     MyName = gamelog.Player_Name,
                     MyRank = gamelog.Player_Rank,
@@ -626,7 +629,7 @@ public class UdpServer:IDisposable
         {
             Type = LobbyPacketType.GameStart,
             RoomId = roomData.RoomId,
-            LastUpdateTime = DateTime.UtcNow
+            LastUpdateTime = DateTime.UtcNow.ToString("o")
         };
         SendGameStartPacket(gameStartResponsePacket, roomData);
 
@@ -677,7 +680,7 @@ public class UdpServer:IDisposable
                 Position = newPlayerUnit.Position,
                 Rotation = newPlayerUnit.Rotation,
                 PrefabIndex = newPlayerUnit.WeaponPrefabIndex,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
 
             BroadcastSpawnPlayerUnitPacket(spawnPlayerUnitPacket, roomData.RoomId);
@@ -689,9 +692,80 @@ public class UdpServer:IDisposable
         {
             Type = LobbyPacketType.DestroyRoom,
             RoomId = roomData.RoomId,
-            LastUpdateTime = DateTime.UtcNow
+            LastUpdateTime = DateTime.UtcNow.ToString("o")
         };
         BroadcastDestroyRoom(destroyRoomPacket, roomData, true);
+    }
+    
+    private async Task HandleGameOver(GamelogPacket? gameOverPacket, IPEndPoint clientEp)
+    {
+        try
+        {
+            if (gameOverPacket == null)
+            {
+                Console.WriteLine("[서버] HandleGameOver: 패킷이 null입니다.");
+                return;
+            }
+
+            if (!_players.TryGetValue(gameOverPacket.MyId, out var myData))
+            {
+                Console.WriteLine($"[서버] HandleGameOver: MyId={gameOverPacket.MyId} _players에 없음");
+                return;
+            }
+
+            //TODO: InGameData에서 적 조회
+            if (!_inGameDataList.TryGetValue(myData.RelatedRoomId, out var inGameData))
+            {
+                Console.WriteLine($"[서버] HandleGameOver: RoomId={myData.RelatedRoomId} InGameData 없음");
+                return;
+            }
+            
+            var enemyUnit = inGameData.PlayerUnitDataMap.Values.FirstOrDefault(p => p.PlayerId != gameOverPacket.MyId);
+            if (enemyUnit == null)
+            {
+                Console.WriteLine("[서버] HandleGameOver: 적 플레이어를 찾을 수 없음");
+                return;
+            }
+
+            // 자기 DB 정보 조회
+            DB_PlayerGameoverInfo? myInfo = await _dbManager.SelectGameOverInfoFromDataSource(gameOverPacket.MyId);
+            if (myInfo == null)
+            {
+                Console.WriteLine("[서버] HandleGameOver: DB에서 플레이어 정보를 가져오지 못했습니다.");
+                return;
+            }
+
+            // 게임 당시 랭크 기록 (UpdateInfo 호출 전)
+            PlayerRank myRankAtGame = DB_PlayerGameoverInfo.ComputeRank(myInfo.Win_score);
+
+            // 적 랭크 Redis에서 조회
+            Redis_players? enemyRedis = await _dbManager.SearchPlayerFromRedis(enemyUnit.PlayerName);
+            PlayerRank enemyRankAtGame = enemyRedis != null
+                ? DB_PlayerGameoverInfo.ComputeRank(enemyRedis.Win_score)
+                : PlayerRank.None;
+
+            // game_result true: 이김(+20) / false: 짐(-20)
+            myInfo.UpdateInfo(gameOverPacket.GameResult ? 20 : -20, gameOverPacket.GameResult);
+
+            // players 업데이트 + gamelogs INSERT 트랜잭션
+            await _dbManager.UpdatePlayerAndInsertGamelog(
+                gameOverPacket.MyId, myInfo,
+                myData.PlayerName, myRankAtGame,
+                enemyUnit.PlayerName, enemyRankAtGame,
+                gameOverPacket.GameResult);
+
+            await _dbManager.DeletePlayerCacheFromRedis(myData.PlayerName);
+
+            // Redis 삭제 후 HandleConnection 재호출 → DB 최신 데이터 재캐싱 + 로비 복귀
+            Interlocked.Decrement(ref _currentPlayerCounts);
+            await HandleConnection(new PlayerPacket { PlayerName = myData.PlayerName }, clientEp);
+
+            Console.WriteLine($"[서버] HandleGameOver: {myData.PlayerName} 처리 완료 (승패: {gameOverPacket.GameResult})");
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("[서버] HandleGameOver: 오류 발생 " + e.Message);
+        }
     }
 
     private void BroadcastSpawnPlayerUnitPacket(PlayerUnitPacket spawnPlayerUnitPacket, int roomDataRoomId)
@@ -735,7 +809,7 @@ public class UdpServer:IDisposable
                 RoomName = roomData.RoomName ?? $"GameRoom{roomData.RoomId}",
                 RoomPlayerLimit = roomData.RoomPlayerLimit,
                 CurrentRoomPlayers = roomData.CurrentRoomPlayers,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
 
             };
 
@@ -768,7 +842,7 @@ public class UdpServer:IDisposable
             {
                 Scene = PacketScene.Lobby,
                 Type = LobbyPacketType.AddPlayerRoom,
-                LastUpdateTime = DateTime.UtcNow,
+                LastUpdateTime = DateTime.UtcNow.ToString("o"),
                 
                 PlayerId = inRoomPlayer.PlayerId,
                 PlayerName = inRoomPlayer.PlayerName,
@@ -849,7 +923,7 @@ public class UdpServer:IDisposable
                 RoomName = roomData.RoomName,
                 RoomPlayerLimit = roomData.RoomPlayerLimit,
                 CurrentRoomPlayers = roomData.CurrentRoomPlayers,
-                LastUpdateTime = DateTime.UtcNow
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             };
 
             string json = JsonSerializer.Serialize(roomUpdatePacket);
@@ -884,7 +958,7 @@ public class UdpServer:IDisposable
         {
             Type = LobbyPacketType.RemovePlayerRoom,
             PlayerId = playerData.PlayerId,
-            LastUpdateTime = DateTime.UtcNow
+            LastUpdateTime = DateTime.UtcNow.ToString("o")
         };
         string json =  JsonSerializer.Serialize(removePlayerPacket);
         Console.WriteLine(json);

@@ -13,37 +13,58 @@ public class DB_players
     public int Win_score { get; set; }
     public float Win_rate { get; set; }
     public PlayerRank Player_rank { get; set; }
-    public DateTimeOffset Created_at { get; set; }
+    public DateTime Created_at { get; set; }
 
-    public DB_players(int player_id, string player_name, int win_score, float win_rate, PlayerRank player_rank,
-        DateTimeOffset created_at)
+    // win_rate, player_rank는 DB에 저장하지 않고 win_counts/lose_counts/win_score로 계산
+    public DB_players(int player_id, string player_name, int win_score, int win_counts, int lose_counts,
+        DateTime created_at)
     {
         Player_id = player_id;
         Player_name = player_name;
         Win_score = win_score;
-        Win_rate = win_rate;
-        Player_rank = player_rank;
+        int total = win_counts + lose_counts;
+        Win_rate = total > 0 ? (float)100.0 * win_counts / total : 0f;
+        Player_rank = DB_PlayerGameoverInfo.ComputeRank(win_score);
         Created_at = created_at;
     }
 }
 
-// public class DB_gamelogs
-// {
-//     public int Log_id { get; set; }
-//     public int Player_id { get; set; }
-//     public int Enemy_id { get; set; }
-//     public bool Game_result { get; set; }
-//     public DateTimeOffset Created_at { get; set; }
-//
-//     public DB_gamelogs(int log_id, int player_id, int enemy_id, bool game_result, DateTimeOffset created_at)
-//     {
-//         Log_id = log_id;
-//         Player_id = player_id;
-//         Enemy_id = enemy_id;
-//         Game_result = game_result;
-//         Created_at = created_at;
-//     }
-// }
+public class DB_PlayerGameoverInfo
+{
+    public int Win_score { get; set; }
+    public int Win_counts { get; set; }
+    public int Lose_counts { get; set; }
+
+    public DB_PlayerGameoverInfo(int win_score, int win_counts, int lose_counts)
+    {
+        Win_score = win_score;
+        Win_counts = win_counts;
+        Lose_counts = lose_counts;
+    }
+
+    public float UpdateInfo(int update_win_score, bool isWin)
+    {
+        Win_score += update_win_score;
+        if (Win_score < 0) Win_score = 0;
+        
+        if (isWin) Win_counts += 1;
+        else Lose_counts += 1;
+
+        int total = Win_counts + Lose_counts;
+        return total > 0 ? (float)100.0 * Win_counts / total : 0f;
+    }
+
+    public static PlayerRank ComputeRank(int winScore)
+    {
+        if (winScore >= 2400) return PlayerRank.General;
+        if (winScore >= 1000) return PlayerRank.Colonel;
+        if (winScore >= 500)  return PlayerRank.Captain;
+        if (winScore >= 0)    return PlayerRank.Sergeant;
+        return PlayerRank.None;
+    }
+
+    public PlayerRank UpdateRank() => ComputeRank(Win_score);
+}
 
 public class DB_playersNgamelogsJoined
 {
@@ -53,10 +74,10 @@ public class DB_playersNgamelogsJoined
     public PlayerRank Enemy_rank { get; set; }
     
     public bool Game_result { get; set; }
-    public DateTimeOffset Created_at { get; set; }
+    public DateTime Created_at { get; set; }
 
     public DB_playersNgamelogsJoined(string playerName, int playerRank, string enemyName, int enemyRank,
-        bool gameResult, DateTimeOffset created_at)
+        bool gameResult, DateTime created_at)
     {
         Player_Name = playerName;
         Player_Rank = (PlayerRank)playerRank;
@@ -97,7 +118,7 @@ public class DbManager : IDisposable
     private IDatabase? _db;
 
     private string connectionString =
-        "Host=127.0.0.1;Port=5432;Database=postgres;Username=postgres;Password=tkddbs321!";
+        "Host=127.0.0.1;Port=5432;Database=frontline_collapse;Username=postgres;Password=tkddbs321!";
 
     #region DB 연결 메서드
 
@@ -187,15 +208,15 @@ public class DbManager : IDisposable
         try
         {
             await using var cmd = _dataSource?.CreateCommand(
-                "SELECT player_id, player_name, win_score, win_rate, player_rank, created_at FROM players WHERE player_name = @name");
+                "SELECT player_id, player_name, win_score, win_counts, lose_counts, created_at FROM players WHERE player_name = @name");
             cmd.Parameters.AddWithValue("name", playerName);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
                 Console.WriteLine($"[DbManager] SelectPlayerFromDataSource: {playerName} DB 조회 성공");
-                return new DB_players(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2), 
-                    reader.GetFloat(3), (PlayerRank)reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5));
+                return new DB_players(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2),
+                    reader.GetInt32(3), reader.GetInt32(4), reader.GetDateTime(5));
             }
 
             Console.WriteLine($"[DbManager] SelectPlayerFromDataSource: {playerName} DB에 존재하지 않음");
@@ -206,6 +227,32 @@ public class DbManager : IDisposable
             Console.WriteLine($"[DbManager] SelectPlayerFromDataSource: 오류 발생 {e.Message}");
             return null;
         }
+    }
+
+    public async Task<DB_PlayerGameoverInfo?> SelectGameOverInfoFromDataSource(int playerId)
+    {
+        try
+        {
+            await using var cmd = _dataSource.CreateCommand(
+                "SELECT win_score, win_counts, lose_counts FROM players WHERE player_id = @playerId");
+            cmd.Parameters.AddWithValue("playerId", playerId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                Console.WriteLine("[DbManager] SelectGameOverInfoFromDataSource 유저 랭크 정보 불러옴!");
+                return new DB_PlayerGameoverInfo(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
+            }
+            Console.WriteLine("[DbManager] SelectGameOverInfoFromDataSource : 오류발생! ");
+            return null;
+            
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("[DbManager] SelectGameOverInfoFromDataSource : 오류발생! " + e.Message);
+            return null;
+        }
+        
     }
 
     // DB players 테이블에 신규 플레이어 INSERT, 생성된 player_id 반환
@@ -226,31 +273,68 @@ public class DbManager : IDisposable
         }
     }
 
-    public async Task<List<DB_playersNgamelogsJoined>> ShowGamelogsFromDataSource(int playerId)
+    public async Task<List<DB_playersNgamelogsJoined>> ShowGamelogsFromDataSource(string playerName)
     {
         var selectedLogList = new List<DB_playersNgamelogsJoined>();
         
         await using var cmd = _dataSource?.CreateCommand(
-            "SELECT \n    p1.player_name AS my_name,\n    p1.player_rank AS my_rank,\n    p2.player_name AS enemy_name,\n    " +
-            "p2.player_rank AS enemy_rank, \n    g.game_result AS gameResult,\n    g.created_at AS gameoverTime\nFROM gamelogs g\nJOIN players p1 " +
-            "ON g.player_id = p1.player_id\nJOIN players p2 ON g.enemy_id = p2.player_id\nWHERE g.player_id = @player_id\n" +
-            "ORDER BY g.created_at DESC\nLIMIT 10;");
+            "SELECT player_name, player_rank, enemy_name, enemy_rank, game_result, played_at " +
+            "FROM gamelogs WHERE player_name = @player_name ORDER BY played_at DESC LIMIT 10");
 
-        cmd.Parameters.AddWithValue("player_id", playerId);
+        cmd.Parameters.AddWithValue("player_name", playerName);
 
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            DB_playersNgamelogsJoined? gamelog = new DB_playersNgamelogsJoined(reader.GetString(0), reader.GetInt32(1),  reader.GetString(2),
-                reader.GetInt32(3), reader.GetBoolean(4),reader.GetFieldValue<DateTimeOffset>(5));
+            DB_playersNgamelogsJoined? gamelog = new DB_playersNgamelogsJoined(reader.GetString(0), reader.GetInt32(1), reader.GetString(2),
+                reader.GetInt32(3), reader.GetBoolean(4), reader.GetDateTime(5));
             
             selectedLogList.Add(gamelog);
         }
-        Console.WriteLine($"[DbManager] ShowGamelogsFromDataSource: playerId={playerId} 조회 완료 ({selectedLogList.Count}건)");
+        Console.WriteLine($"[DbManager] ShowGamelogsFromDataSource: playerName={playerName} 조회 완료 ({selectedLogList.Count}건)");
         return selectedLogList;
     }
-    
-    
+
+    public async Task UpdatePlayerAndInsertGamelog(int playerId, DB_PlayerGameoverInfo info,
+        string playerName, PlayerRank playerRank, string enemyName, PlayerRank enemyRank, bool gameResult)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        try
+        {
+            // players 업데이트
+            await using var updateCmd = connection.CreateCommand();
+            updateCmd.Transaction = transaction;
+            updateCmd.CommandText =
+                "UPDATE players SET win_score = @win_score, win_counts = @win_counts, lose_counts = @lose_counts WHERE player_id = @player_id";
+            updateCmd.Parameters.AddWithValue("win_score", info.Win_score);
+            updateCmd.Parameters.AddWithValue("win_counts", info.Win_counts);
+            updateCmd.Parameters.AddWithValue("lose_counts", info.Lose_counts);
+            updateCmd.Parameters.AddWithValue("player_id", playerId);
+            await updateCmd.ExecuteNonQueryAsync();
+
+            // gamelogs INSERT
+            await using var insertCmd = connection.CreateCommand();
+            insertCmd.Transaction = transaction;
+            insertCmd.CommandText =
+                "INSERT INTO gamelogs (player_name, player_rank, enemy_name, enemy_rank, game_result) " +
+                "VALUES (@player_name, @player_rank, @enemy_name, @enemy_rank, @game_result)";
+            insertCmd.Parameters.AddWithValue("player_name", playerName);
+            insertCmd.Parameters.AddWithValue("player_rank", (int)playerRank);
+            insertCmd.Parameters.AddWithValue("enemy_name", enemyName);
+            insertCmd.Parameters.AddWithValue("enemy_rank", (int)enemyRank);
+            insertCmd.Parameters.AddWithValue("game_result", gameResult);
+            await insertCmd.ExecuteNonQueryAsync();
+
+            await transaction.CommitAsync();
+            Console.WriteLine($"[DbManager] UpdatePlayerAndInsertGamelog: {playerName} vs {enemyName} 트랜잭션 커밋 완료");
+        }
+        catch (Exception e)
+        {
+            await transaction.RollbackAsync();
+            Console.WriteLine("[DbManager] UpdatePlayerAndInsertGamelog: 트랜잭션 롤백 " + e.Message);
+        }
+    }
 
     // Redis Hash에서 플레이어 데이터 조회 후 Redis_players로 변환
     public async Task<Redis_players?> SearchPlayerFromRedis(string playerName)
@@ -268,7 +352,12 @@ public class DbManager : IDisposable
         Console.WriteLine($"[DbManager] SearchPlayerFromRedis: player_id={playerId} 데이터 반환");
         return new Redis_players(playerId, winScore, winRate, rank);
     }
-    
+
+    public async Task DeletePlayerCacheFromRedis(string? playerName)
+    {
+        await _db.KeyDeleteAsync($"player:{playerName}");
+        await _db.KeyDeleteAsync($"session:{playerName}");
+    }
 
     // DB에서 가져온 players 데이터를 Redis Hash로 캐싱 (TTL 1시간)
     private async Task CachingPlayerToRedis(DB_players? playerDbData)

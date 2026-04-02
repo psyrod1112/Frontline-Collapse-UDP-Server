@@ -37,6 +37,7 @@ public enum LobbyPacketType
     //게임 관련
     GameStart,
     GameReady,
+    GameOver
 }
 
 public enum InGamePacketType
@@ -53,7 +54,7 @@ public class BasePacket
     public PacketScene Scene { get; set; }
     public LobbyPacketType Type { get; set; }
     public InGamePacketType Type2 { get; set; }
-    public DateTime LastUpdateTime { get; set; }
+    public string LastUpdateTime { get; set; }
 }
 
 public class PlayerPacket : BasePacket
@@ -63,6 +64,7 @@ public class PlayerPacket : BasePacket
     public int WinScore { get; set; }
     public float WinRate { get; set; }
     public PlayerRank PlayerRank { get; set; }
+    
     public int RelatedRoomId { get; set; }
 }
 
@@ -78,15 +80,15 @@ public class RoomPacket : BasePacket
 public class GamelogPacket : BasePacket
 {
     public int LogId { get; set; }
-    
+
     public int MyId { get; set; }
     public string MyName { get; set; }
     public PlayerRank MyRank { get; set; }
-    
-    public int EnemyId  { get; set; }
-    public string EnemyName  { get; set; }
-    public PlayerRank EnemyRank  { get; set; }
-    
+
+    public int EnemyId { get; set; }
+    public string EnemyName { get; set; }
+    public PlayerRank EnemyRank { get; set; }
+
     public bool GameResult { get; set; }
     public DateTimeOffset GameOverTime { get; set; }
 }

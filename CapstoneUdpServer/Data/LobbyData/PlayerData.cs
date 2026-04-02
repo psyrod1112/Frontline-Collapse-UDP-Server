@@ -4,10 +4,11 @@ namespace CapstoneUdpServer.Data;
 
 public enum PlayerRank
 {
-    Sergeant = 0,
-    Captain = 1,
-    Colonel = 2,
-    General = 3
+    Sergeant,
+    Captain,
+    Colonel,
+    General,
+    None
 }
 
 public class PlayerData
