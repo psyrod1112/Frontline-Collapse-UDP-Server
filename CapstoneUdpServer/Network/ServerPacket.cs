@@ -37,7 +37,10 @@ public enum LobbyPacketType
     //게임 관련
     GameStart,
     GameReady,
-    GameOver
+    GameOver,
+    
+    //하트비트
+    Heartbeat
 }
 
 public enum InGamePacketType

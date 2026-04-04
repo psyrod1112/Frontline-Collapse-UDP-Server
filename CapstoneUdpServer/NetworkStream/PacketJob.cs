@@ -1,34 +1,45 @@
 using System.Net;
+using System.Text;
+using System.Text.Json;
 using CapstoneUdpServer.Core;
+using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
 
 namespace CapstoneUdpServer.NetworkStream;
 
 public class PacketJob : IJob
 {
-    private readonly UdpServer _server;
-    private readonly byte[] _buffer;
-    private readonly int _bufferSize;
-    private readonly IPEndPoint _endPoint;
+    private readonly LobbyServer  _lobbyServer;
+    private readonly InGameServer _inGameServer;
+    private readonly byte[]       _buffer;
+    private readonly int          _bufferSize;
+    private readonly IPEndPoint   _endPoint;
 
-    public PacketJob(UdpServer server, byte[] buffer, int bufferSize, IPEndPoint endPoint)
+    public PacketJob(LobbyServer lobbyServer, InGameServer inGameServer,
+                     byte[] buffer, int bufferSize, IPEndPoint endPoint)
     {
-        _server = server;
-        _buffer = buffer;
-        _bufferSize = bufferSize;
-        _endPoint = endPoint;
+        _lobbyServer  = lobbyServer;
+        _inGameServer = inGameServer;
+        _buffer       = buffer;
+        _bufferSize   = bufferSize;
+        _endPoint     = endPoint;
     }
 
     public void Execute()
     {
         try
         {
-            //TODO: 패킷 Scene타입에 따라 ProcessPacket이나 인게임 processPacket으로 나눠서 처리
-            _server.ProcessPacket(_buffer, _bufferSize, _endPoint);
+            string      jsonData = Encoding.UTF8.GetString(_buffer, 0, _bufferSize);
+            BasePacket? header   = JsonSerializer.Deserialize<BasePacket>(jsonData);
+
+            if (header?.Scene == PacketScene.InGame)
+                _inGameServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
+            else
+                _lobbyServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
         }
         catch (Exception e)
         {
-            Console.WriteLine("[서버] Execute: 오류 발생" + e.Message);
+            Console.WriteLine("[PacketJob] Execute 오류: " + e.Message);
         }
     }
 }
