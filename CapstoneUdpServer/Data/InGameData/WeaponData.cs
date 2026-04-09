@@ -2,8 +2,9 @@
 
 public enum WeaponType
 {
-    Knife,
-    Gun,
+    None,
+    // 기본 총
+    Rifle,
     
 }
 

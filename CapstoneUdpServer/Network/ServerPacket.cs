@@ -43,22 +43,11 @@ public enum InGamePacketType
     None,
     // 스폰
     SpawnPlayerUnit,
-    GameOver,
-
-    // 이동
-    MovePlayer,
-
-    // 총알
-    BulletFire,
-    BulletHit,
-
-    // 건물
-    BuildingCreate,
-    BuildingDestroy,
-
-    // 미사일
-    MissileFire,
-    MissileExplosion,
+    
+    //UI 업데이트
+    UIUpdateRequest,
+    UIUpdateResponse,
+    
 }
 
 public enum HitTargetType  { Player, MovingUnit, Building, Environment }
@@ -114,18 +103,36 @@ public class InGamePacket : BasePacket
     public int     FieldId       { get; set; }
     public int     PlayerId      { get; set; }
     public float   CurrentHp     { get; set; }
+    public float   MaxHp     { get; set; }
     public float   DamageAmount  { get; set; }
     public float   DamagedAmount { get; set; }
     public Vector3 Position      { get; set; }
     public Vector3 Rotation      { get; set; }
-    public int     PrefabIndex   { get; set; }
 }
+
+public class UIPacket : InGamePacket
+{
+    public string PlayerName      { get; set; }
+    public PlayerRank PlayerRank { get; set; }
+    public int Gold { get; set; }
+    public int Level { get; set; }
+    public float Exp { get; set; }
+    public float RequiredExp { get; set; }
+    public WeaponType WeaponPrefabIndex_1 { get; set; }
+    public WeaponType WeaponPrefabIndex_2 { get; set; }
+    public WeaponType WeaponPrefabIndex_3 { get; set; }
+    public WeaponType WeaponPrefabIndex_4 { get; set; }
+    public int KillCount { get; set; }
+    public int DeathCount { get; set; }
+    public int CSCount { get; set; }
+}
+
 
 public class PlayerUnitPacket : InGamePacket
 {
     public Vector3         Velocity      { get; set; }
     public PlayerAnimState AnimState     { get; set; }
-    public int             WeaponIndex   { get; set; }
+    public WeaponType      WeaponIndex   { get; set; }
     public int             BuildingIndex { get; set; }
 }
 

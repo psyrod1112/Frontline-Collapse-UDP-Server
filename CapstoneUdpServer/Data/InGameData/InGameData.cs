@@ -7,7 +7,6 @@ public class InGameData
 {
     public ConcurrentDictionary<int, PlayerUnitData>    PlayerUnitDataMap { get; } = new();
     public ConcurrentDictionary<int, InGameBuildingRecord> BuildingMap    { get; } = new();
-    public MovingUnitData? MovingUnitData;
 }
 
 /// <summary>씬에 배치된 건물 한 개의 인게임 상태</summary>

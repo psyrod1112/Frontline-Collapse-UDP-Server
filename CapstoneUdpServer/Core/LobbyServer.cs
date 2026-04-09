@@ -99,7 +99,7 @@ public class LobbyServer : IDisposable
         if (data == null) return;
 
         // 로비 pool에 추가 (연결은 이미 수립된 상태)
-        _store.AddToLobby(data.Player_id, new PlayerData(packet.PlayerName, data.Player_id, clientEp));
+        _store.AddToLobby(data.Player_id, new PlayerData(packet.PlayerName, data.Player_id, data.Player_rank, clientEp));
 
         Send(new PlayerPacket
         {
@@ -308,18 +308,48 @@ public class LobbyServer : IDisposable
         {
             var unit = new PlayerUnitData(p, roomData.RoomId);
             newInGameData.PlayerUnitDataMap[p.PlayerId] = unit;
+            unit.SetPosition(unit.Position + new Vector3(startPosX, 5, 0), unit.Rotation);
+            
+            // 인게임 플레이어 생성.
             BroadcastSpawnPlayerUnit(new PlayerUnitPacket
             {
                 Type2 = InGamePacketType.SpawnPlayerUnit,
                 PlayerId = unit.PlayerId, 
                 FieldId = unit.FieldId,
                 CurrentHp = unit.CurrentHp, 
-                Position = unit.Position + new Vector3(startPosX, 5, 0),
+                Position = unit.Position,
                 Rotation = unit.Rotation, 
-                PrefabIndex = unit.WeaponPrefabIndex,
+                WeaponIndex = unit.CurrentWeaponPrefabIndex,
                 LastUpdateTime = DateTime.UtcNow.ToString("o")
             }, roomData);
             startPosX += 10;
+            
+            // 인게임 UI 초기화
+            Send(new UIPacket
+            {
+                Type2 = InGamePacketType.UIUpdateResponse,
+                PlayerId = unit.PlayerId, 
+                FieldId = unit.FieldId,
+                CurrentHp = unit.CurrentHp, 
+                Position = unit.Position,
+                Rotation = unit.Rotation, 
+                LastUpdateTime = DateTime.UtcNow.ToString("o"),
+                
+                Gold = unit.Gold,
+                Level =  unit.Level,
+                Exp = unit.Exp,
+                RequiredExp = unit.RequiredExp,
+                WeaponPrefabIndex_1 = unit.WeaponPrefabIndex_1,
+                WeaponPrefabIndex_2 = unit.WeaponPrefabIndex_2,
+                WeaponPrefabIndex_3 = unit.WeaponPrefabIndex_3,
+                WeaponPrefabIndex_4 = unit.WeaponPrefabIndex_4,
+                
+                KillCount =  unit.KillCount,
+                DeathCount = unit.DeathCount,
+                CSCount = unit.CSCount,
+                
+            },(IPEndPoint)p.ClientEp);
+            
         }
         _inGameDataList[roomData.RoomId] = newInGameData;
 
