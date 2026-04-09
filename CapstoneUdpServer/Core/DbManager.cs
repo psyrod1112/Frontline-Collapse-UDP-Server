@@ -90,14 +90,14 @@ public class DB_playersNgamelogsJoined
     
 }
 
-public class Redis_players
+public class Redis_playerRankInfo
 {
     public int Player_id { get; set; }
     public int Win_score { get; set; }
     public float Win_rate { get; set; }
     public PlayerRank Player_rank { get; set; }
 
-    public Redis_players(int player_id, int win_score, float win_rate, PlayerRank player_rank)
+    public Redis_playerRankInfo(int player_id, int win_score, float win_rate, PlayerRank player_rank)
     {
         Player_id = player_id;
         Win_score = win_score;
@@ -162,7 +162,7 @@ public class DbManager : IDisposable
 
     // Redis 캐시 조회 → 없으면 DB 조회 → 없으면 DB INSERT 후 캐싱
     // 항상 Redis_players 반환 (로그인/재접속 공통 진입점)
-    public async Task<Redis_players?> SearchPlayerFromDB(string playerName)
+    public async Task<Redis_playerRankInfo?> SearchPlayerFromDB(string playerName)
     {
         try
         {
@@ -337,7 +337,7 @@ public class DbManager : IDisposable
     }
 
     // Redis Hash에서 플레이어 데이터 조회 후 Redis_players로 변환
-    public async Task<Redis_players?> SearchPlayerFromRedis(string playerName)
+    public async Task<Redis_playerRankInfo?> SearchPlayerFromRedis(string playerName)
     {
         HashEntry[] entries = await _db.HashGetAllAsync($"player:{playerName}");
 
@@ -350,7 +350,7 @@ public class DbManager : IDisposable
         PlayerRank rank = (PlayerRank)(int)dict["player_rank"];
 
         Console.WriteLine($"[DbManager] SearchPlayerFromRedis: player_id={playerId} 데이터 반환");
-        return new Redis_players(playerId, winScore, winRate, rank);
+        return new Redis_playerRankInfo(playerId, winScore, winRate, rank);
     }
 
     public async Task DeletePlayerCacheFromRedis(string? playerName)
@@ -377,7 +377,35 @@ public class DbManager : IDisposable
     #endregion
 
 
-    //ShowGamelogsFromDataSource 랑 
+    /// <summary>
+    /// 게임 오버 시 플레이어 한 명의 DB/Redis 처리를 한 번에 수행.
+    /// 1) SelectGameOverInfo → 2) ComputeRank → 3) UpdateInfo(±20) →
+    /// 4) UpdatePlayerAndInsertGamelog → 5) DeletePlayerCacheFromRedis
+    /// </summary>
+    public async Task ProcessGameOverAsync(
+        int playerId, string playerName,
+        string enemyName, PlayerRank enemyRank,
+        bool isWinner)
+    {
+        DB_PlayerGameoverInfo? info = await SelectGameOverInfoFromDataSource(playerId);
+        if (info == null)
+        {
+            Console.WriteLine($"[DbManager] ProcessGameOverAsync: {playerName} DB 조회 실패");
+            return;
+        }
+
+        PlayerRank myRank = DB_PlayerGameoverInfo.ComputeRank(info.Win_score);
+        info.UpdateInfo(isWinner ? 20 : -20, isWinner);
+
+        await UpdatePlayerAndInsertGamelog(
+            playerId, info,
+            playerName, myRank,
+            enemyName, enemyRank,
+            isWinner);
+
+        await DeletePlayerCacheFromRedis(playerName);
+        Console.WriteLine($"[DbManager] ProcessGameOverAsync: {playerName} 처리 완료 (isWinner={isWinner})");
+    }
 
     public void Dispose()
     {

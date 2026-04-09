@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
+using static CapstoneUdpServer.Network.JsonOpts;
 
 namespace CapstoneUdpServer.Core;
 
@@ -73,6 +75,7 @@ public class LobbyServer : IDisposable
             case LobbyPacketType.GameOver:
                 _ = HandleGameOver(JsonSerializer.Deserialize<GamelogPacket>(jsonData), clientEp);
                 break;
+            //TODO: 게임오버는 서버 내부 탐지로 전환 예정 → InGameServer.HandleServerGameOver()
             case LobbyPacketType.Heartbeat:
                 HandleHeartbeat(JsonSerializer.Deserialize<PlayerPacket>(jsonData), clientEp);
                 break;
@@ -92,7 +95,7 @@ public class LobbyServer : IDisposable
         if (_currentPlayerCounts > 100)        { Console.WriteLine("[LobbyServer] 서버 인원 초과"); return; }
         if (packet == null)                    { Console.WriteLine("[LobbyServer] HandleConnection: 패킷 null"); return; }
 
-        Redis_players? data = await _dbManager.SearchPlayerFromDB(packet.PlayerName);
+        Redis_playerRankInfo? data = await _dbManager.SearchPlayerFromDB(packet.PlayerName);
         if (data == null) return;
 
         // 로비 pool에 추가 (연결은 이미 수립된 상태)
@@ -188,7 +191,7 @@ public class LobbyServer : IDisposable
         if (packet == null) return;
         if (!_store.TryGetLobby(packet.PlayerId, out var playerData)) return;
 
-        Redis_players? info = await _dbManager.SearchPlayerFromRedis(playerData.PlayerName);
+        Redis_playerRankInfo? info = await _dbManager.SearchPlayerFromRedis(playerData.PlayerName);
         if (info == null) return;
 
         BroadcastAddPlayer(new PlayerPacket
@@ -235,10 +238,14 @@ public class LobbyServer : IDisposable
             DB_players? info = await _dbManager.SelectPlayerFromDataSource(playerData.PlayerName);
             Send(new PlayerPacket
             {
-                Scene = PacketScene.Lobby, Type = LobbyPacketType.ShowPlayerInfo,
-                PlayerId = info.Player_id, PlayerName = playerData.PlayerName,
-                WinScore = info.Win_score, WinRate = info.Win_rate, PlayerRank = info.Player_rank,
-                RelatedRoomId = playerData.RelatedRoomId, LastUpdateTime = DateTime.UtcNow.ToString("o")
+                Type = LobbyPacketType.ShowPlayerInfo,
+                PlayerId = info.Player_id, 
+                PlayerName = playerData.PlayerName,
+                WinScore = info.Win_score, 
+                WinRate = info.Win_rate, 
+                PlayerRank = info.Player_rank,
+                RelatedRoomId = playerData.RelatedRoomId, 
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             }, clientEp);
 
             var logs = await _dbManager.ShowGamelogsFromDataSource(playerData.PlayerName);
@@ -246,10 +253,13 @@ public class LobbyServer : IDisposable
             {
                 Send(new GamelogPacket
                 {
-                    Scene = PacketScene.Lobby, Type = LobbyPacketType.ShowGamelogsResponse,
-                    MyName = log.Player_Name, MyRank = log.Player_Rank,
-                    EnemyName = log.Enemy_Name, EnemyRank = log.Enemy_rank,
-                    GameResult = log.Game_result, GameOverTime = log.Created_at,
+                    Type = LobbyPacketType.ShowGamelogsResponse,
+                    MyName = log.Player_Name, 
+                    MyRank = log.Player_Rank,
+                    EnemyName = log.Enemy_Name, 
+                    EnemyRank = log.Enemy_rank,
+                    GameResult = log.Game_result, 
+                    GameOverTime = log.Created_at,
                     LastUpdateTime = DateTime.UtcNow.ToString("o")
                 }, clientEp);
             }
@@ -267,7 +277,8 @@ public class LobbyServer : IDisposable
 
         SendGameStartPacket(new RoomPacket
         {
-            Type = LobbyPacketType.GameStart, RoomId = roomData.RoomId,
+            Type = LobbyPacketType.GameStart, 
+            RoomId = roomData.RoomId,
             LastUpdateTime = DateTime.UtcNow.ToString("o")
         }, roomData);
     }
@@ -279,10 +290,11 @@ public class LobbyServer : IDisposable
         if (!_roomLists.TryGetValue(packet.RelatedRoomId, out var roomData)) return;
 
         playerData.IsGameReady = true;
-
         foreach (var p in roomData.InRoomPlayers.Values)
             if (!p.IsGameReady) return;
+        
 
+        // 막타 치는 놈이 앞으로 아래 코드들 실행.
         // 로비 pool → 인게임 pool 이동 (연결 유지, 데이터만 이동)
         foreach (var p in roomData.InRoomPlayers.Values)
         {
@@ -291,18 +303,23 @@ public class LobbyServer : IDisposable
         }
 
         var newInGameData = new InGameData();
+        int startPosX = -10;
         foreach (var p in roomData.InRoomPlayers.Values)
         {
             var unit = new PlayerUnitData(p, roomData.RoomId);
             newInGameData.PlayerUnitDataMap[p.PlayerId] = unit;
             BroadcastSpawnPlayerUnit(new PlayerUnitPacket
             {
-                Scene = PacketScene.InGame, Type2 = InGamePacketType.SpawnPlayerUnit,
-                PlayerId = unit.PlayerId, FieldId = unit.FieldId,
-                CurrentHp = unit.CurrentHp, Position = unit.Position,
-                Rotation = unit.Rotation, PrefabIndex = unit.WeaponPrefabIndex,
+                Type2 = InGamePacketType.SpawnPlayerUnit,
+                PlayerId = unit.PlayerId, 
+                FieldId = unit.FieldId,
+                CurrentHp = unit.CurrentHp, 
+                Position = unit.Position + new Vector3(startPosX, 5, 0),
+                Rotation = unit.Rotation, 
+                PrefabIndex = unit.WeaponPrefabIndex,
                 LastUpdateTime = DateTime.UtcNow.ToString("o")
             }, roomData);
+            startPosX += 10;
         }
         _inGameDataList[roomData.RoomId] = newInGameData;
 
@@ -313,6 +330,10 @@ public class LobbyServer : IDisposable
         }, roomData, true);
     }
 
+    /// <summary>
+    /// 클라이언트 GameOver 패킷 수신 시 처리 (테스트용).
+    /// 패킷 발신자(MyId)와 상대방 모두 DB 처리 → pool 복귀 → 로비 재연결.
+    /// </summary>
     private async Task HandleGameOver(GamelogPacket? packet, IPEndPoint clientEp)
     {
         if (packet == null) return;
@@ -323,38 +344,86 @@ public class LobbyServer : IDisposable
         }
         if (!_inGameDataList.TryGetValue(myData.RelatedRoomId, out var inGameData)) return;
 
-        var enemyUnit = inGameData.PlayerUnitDataMap.Values
-                                  .FirstOrDefault(p => p.PlayerId != packet.MyId);
-        if (enemyUnit == null) return;
-
-        try
+        var players = inGameData.PlayerUnitDataMap.Values.ToList();
+        if (players.Count < 2)
         {
-            DB_PlayerGameoverInfo? myInfo = await _dbManager.SelectGameOverInfoFromDataSource(packet.MyId);
-            if (myInfo == null) return;
-
-            PlayerRank myRank    = DB_PlayerGameoverInfo.ComputeRank(myInfo.Win_score);
-            Redis_players? er    = await _dbManager.SearchPlayerFromRedis(enemyUnit.PlayerName);
-            PlayerRank enemyRank = er != null ? DB_PlayerGameoverInfo.ComputeRank(er.Win_score) : PlayerRank.None;
-
-            myInfo.UpdateInfo(packet.GameResult ? 20 : -20, packet.GameResult);
-
-            await _dbManager.UpdatePlayerAndInsertGamelog(
-                packet.MyId, myInfo,
-                myData.PlayerName, myRank,
-                enemyUnit.PlayerName, enemyRank,
-                packet.GameResult);
-
-            await _dbManager.DeletePlayerCacheFromRedis(myData.PlayerName);
-
-            // 인게임 pool → 로비 pool 복귀 (연결 유지, 데이터만 이동)
-            _store.MoveToLobby(packet.MyId);
-            Console.WriteLine($"[LobbyServer] {myData.PlayerName} 인게임 → 로비 pool 복귀");
-
-            Interlocked.Decrement(ref _currentPlayerCounts);
-            await HandleConnection(new PlayerPacket { PlayerName = myData.PlayerName }, clientEp);
+            Console.WriteLine("[LobbyServer] HandleGameOver: 플레이어 수 부족");
+            return;
         }
-        catch (Exception e) { Console.WriteLine("[LobbyServer] HandleGameOver 오류: " + e.Message); }
+
+        // 게임오버 전 랭크 미리 조회 (gamelog 상대 랭크 기록용)
+        var rankCache = new Dictionary<int, PlayerRank>();
+        foreach (var p in players)
+        {
+            Redis_playerRankInfo? info = await _dbManager.SearchPlayerFromRedis(p.PlayerName);
+            rankCache[p.PlayerId] = info != null
+                ? DB_PlayerGameoverInfo.ComputeRank(info.Win_score)
+                : PlayerRank.None;
+        }
+
+        // 양쪽 모두 DB 처리 → pool 복귀 → 로비 재연결
+        foreach (var p in players)
+        {
+            // 패킷 발신자의 GameResult 기준으로 승패 결정
+            bool isWinner  = p.PlayerId == packet.MyId ? packet.GameResult : !packet.GameResult;
+            var  enemy     = players.First(x => x.PlayerId != p.PlayerId);
+            PlayerRank enemyRank = rankCache.GetValueOrDefault(enemy.PlayerId, PlayerRank.None);
+
+            try
+            {
+                await _dbManager.ProcessGameOverAsync(
+                    p.PlayerId, p.PlayerName,
+                    enemy.PlayerName, enemyRank,
+                    isWinner);
+
+                _store.MoveToLobby(p.PlayerId);
+                Console.WriteLine($"[LobbyServer] {p.PlayerName} 인게임 → 로비 pool 복귀");
+
+                Interlocked.Decrement(ref _currentPlayerCounts);
+                await HandleConnection(
+                    new PlayerPacket { PlayerName = p.PlayerName },
+                    (IPEndPoint)p.IpEndPoint);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[LobbyServer] HandleGameOver {p.PlayerName} 처리 오류: {e.Message}");
+            }
+        }
+
+        _inGameDataList.TryRemove(myData.RelatedRoomId, out _);
+        Console.WriteLine($"[LobbyServer] fieldId={myData.RelatedRoomId} 인게임 데이터 제거 완료");
     }
+
+    /*
+    // TODO: 서버 내부 탐지 전환 시 아래 메서드 사용
+    // InGameServer에서 HP 0 탐지 후 호출: await _lobbyServer.HandleServerGameOver(fieldId, winnerPlayerId)
+    public async Task HandleServerGameOver(int fieldId, int winnerPlayerId)
+    {
+        if (!_inGameDataList.TryGetValue(fieldId, out var inGameData)) return;
+        var players = inGameData.PlayerUnitDataMap.Values.ToList();
+        if (players.Count < 2) return;
+
+        var rankCache = new Dictionary<int, PlayerRank>();
+        foreach (var p in players)
+        {
+            Redis_playerRankInfo? info = await _dbManager.SearchPlayerFromRedis(p.PlayerName);
+            rankCache[p.PlayerId] = info != null
+                ? DB_PlayerGameoverInfo.ComputeRank(info.Win_score)
+                : PlayerRank.None;
+        }
+        foreach (var p in players)
+        {
+            bool isWinner = p.PlayerId == winnerPlayerId;
+            var  enemy    = players.First(x => x.PlayerId != p.PlayerId);
+            PlayerRank enemyRank = rankCache.GetValueOrDefault(enemy.PlayerId, PlayerRank.None);
+            await _dbManager.ProcessGameOverAsync(p.PlayerId, p.PlayerName, enemy.PlayerName, enemyRank, isWinner);
+            _store.MoveToLobby(p.PlayerId);
+            Interlocked.Decrement(ref _currentPlayerCounts);
+            await HandleConnection(new PlayerPacket { PlayerName = p.PlayerName }, (IPEndPoint)p.IpEndPoint);
+        }
+        _inGameDataList.TryRemove(fieldId, out _);
+    }
+    */
 
     private void HandleHeartbeat(PlayerPacket? packet, IPEndPoint clientEp)
     {
@@ -396,13 +465,16 @@ public class LobbyServer : IDisposable
         if (!_roomLists.TryGetValue(me.RelatedRoomId, out var roomData)) return;
         foreach (var p in roomData.InRoomPlayers.Values)
         {
-            Redis_players info = await _dbManager.SearchPlayerFromRedis(p.PlayerName);
+            Redis_playerRankInfo info = await _dbManager.SearchPlayerFromRedis(p.PlayerName);
             Send(new PlayerPacket
             {
-                Scene = PacketScene.Lobby, Type = LobbyPacketType.AddPlayerRoom,
-                PlayerId = p.PlayerId, PlayerName = p.PlayerName,
-                WinScore = info.Win_score, WinRate = info.Win_rate, PlayerRank = info.Player_rank,
-                RelatedRoomId = me.RelatedRoomId, LastUpdateTime = DateTime.UtcNow.ToString("o")
+                Type = LobbyPacketType.AddPlayerRoom,
+                PlayerId = p.PlayerId, 
+                PlayerName = p.PlayerName,
+                WinScore = info.Win_score, 
+                WinRate = info.Win_rate, PlayerRank = info.Player_rank,
+                RelatedRoomId = me.RelatedRoomId, 
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
             }, clientEp);
         }
     }

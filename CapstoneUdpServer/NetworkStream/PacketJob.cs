@@ -4,6 +4,7 @@ using System.Text.Json;
 using CapstoneUdpServer.Core;
 using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
+using static CapstoneUdpServer.Network.JsonOpts;
 
 namespace CapstoneUdpServer.NetworkStream;
 
@@ -30,9 +31,9 @@ public class PacketJob : IJob
         try
         {
             string      jsonData = Encoding.UTF8.GetString(_buffer, 0, _bufferSize);
-            BasePacket? header   = JsonSerializer.Deserialize<BasePacket>(jsonData);
+            BasePacket? header   = JsonSerializer.Deserialize<BasePacket>(jsonData, Default);
 
-            if (header?.Scene == PacketScene.InGame)
+            if (header?.Type == LobbyPacketType.None)
                 _inGameServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
             else
                 _lobbyServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
