@@ -5,8 +5,6 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using CapstoneUdpServer.Data;
-using CapstoneUdpServer.Network;
-using static CapstoneUdpServer.Network.JsonOpts;
 
 namespace CapstoneUdpServer.Core;
 
