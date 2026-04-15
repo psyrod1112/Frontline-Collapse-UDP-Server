@@ -150,4 +150,49 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(8)] public float DirZ;
         [ProtoMember(9)] public int WeaponIndex;
     }
+
+    [ProtoContract]
+    public class SpawnPlayerUnitPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public float PosX;
+        [ProtoMember(4)] public float PosY;
+        [ProtoMember(5)] public float PosZ;
+        [ProtoMember(6)] public float RotX;
+        [ProtoMember(7)] public float RotY;
+        [ProtoMember(8)] public float RotZ;
+        [ProtoMember(9)] public float CurrentHp;
+        [ProtoMember(10)] public float MaxHp;
+        [ProtoMember(11)] public int WeaponIndex;
+    }
+
+    [ProtoContract]
+    public class UIUpdateRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class UIUpdateResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public string PlayerName;
+        [ProtoMember(4)] public int PlayerRank;
+        [ProtoMember(5)] public int Gold;
+        [ProtoMember(6)] public int Level;
+        [ProtoMember(7)] public float CurrentHp;
+        [ProtoMember(8)] public float MaxHp;
+        [ProtoMember(9)] public float Exp;
+        [ProtoMember(10)] public float RequiredExp;
+        [ProtoMember(11)] public int WeaponPrefabIndex_1;
+        [ProtoMember(12)] public int WeaponPrefabIndex_2;
+        [ProtoMember(13)] public int WeaponPrefabIndex_3;
+        [ProtoMember(14)] public int WeaponPrefabIndex_4;
+        [ProtoMember(15)] public int KillCount;
+        [ProtoMember(16)] public int DeathCount;
+        [ProtoMember(17)] public int CSCount;
+    }
 }

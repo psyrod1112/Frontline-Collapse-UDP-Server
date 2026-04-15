@@ -39,12 +39,8 @@ public class InGameServer
 
             switch (header?.Type2)
             {
-                case InGamePacketType.UIUpdateRequest:
-                    HandleUIUpdateRequest(JsonSerializer.Deserialize<UIPacket>(jsonData, JsonOpts.Default));
-                    break;
-
                 default:
-                    Console.WriteLine($"[InGameServer] 알 수 없는 패킷 타입: {header?.Type2}");
+                    Console.WriteLine($"[InGameServer] 알 수 없는 JSON 패킷 타입: {header?.Type2}");
                     break;
             }
         }
@@ -57,15 +53,41 @@ public class InGameServer
                     var packet = ProtobufSerializer.Deserialize<PlayerInputPacket>(buffer);
                     HandlePlayerInput(packet, clientEp);
                     break;
+                case (uint)InGamePacketType.UIUpdateRequest:
+                    var uiReqPacket = ProtobufSerializer.Deserialize<UIUpdateRequestPacket>(buffer);
+                    HandleUIUpdateRequest(uiReqPacket, clientEp);
+                    break;
             }
         }
         
     }
 
 
-    private void HandleUIUpdateRequest(UIPacket? deserialize)
+    private void HandleUIUpdateRequest(UIUpdateRequestPacket packet, IPEndPoint clientEp)
     {
-        Console.WriteLine("[InGameServer] UIUpdateRequest 수신 - 미구현");
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+
+        SendProto((uint)InGamePacketType.UIUpdateResponse, new UIUpdateResponsePacket
+        {
+            PlayerId            = unit.PlayerId,
+            FieldId             = unit.FieldId,
+            PlayerName          = unit.PlayerName ?? "",
+            PlayerRank          = (int)unit.PlayerRank,
+            Gold                = unit.Gold,
+            Level               = unit.Level,
+            CurrentHp           = unit.CurrentHp,
+            MaxHp               = unit.MaxHp,
+            Exp                 = unit.Exp,
+            RequiredExp         = unit.RequiredExp,
+            WeaponPrefabIndex_1 = (int)unit.WeaponPrefabIndex_1,
+            WeaponPrefabIndex_2 = (int)unit.WeaponPrefabIndex_2,
+            WeaponPrefabIndex_3 = (int)unit.WeaponPrefabIndex_3,
+            WeaponPrefabIndex_4 = (int)unit.WeaponPrefabIndex_4,
+            KillCount           = unit.KillCount,
+            DeathCount          = unit.DeathCount,
+            CSCount             = unit.CSCount,
+        }, clientEp);
     }
     
     private void HandlePlayerInput(PlayerInputPacket packet, IPEndPoint clientEp)
@@ -101,7 +123,7 @@ public class InGameServer
 
         foreach (var inGamePlayer in _store.InGamePlayers)
         {
-            if (inGamePlayer.RelatedRoomId == PlayerData.FieldId && inGamePlayer.PlayerId != packet.PlayerId)
+            if (inGamePlayer.FieldId == PlayerData.FieldId && inGamePlayer.PlayerId != packet.PlayerId)
             {
                 SendProto((uint)InGamePacketType.RemotePlayerState, remotePlayerStatePacket, (IPEndPoint)inGamePlayer.ClientEp);
             }

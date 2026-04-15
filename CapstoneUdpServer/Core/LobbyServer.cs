@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using CapstoneUdpServer.Data;
+using CapstoneUdpServer.Network;
 
 namespace CapstoneUdpServer.Core;
 
@@ -309,44 +310,43 @@ public class LobbyServer : IDisposable
             unit.SetPosition(unit.Position + new Vector3(startPosX, 5, 0), unit.Rotation);
             
             // 인게임 플레이어 생성.
-            BroadcastSpawnPlayerUnit(new PlayerUnitPacket
+            BroadcastSpawnPlayerUnit(new SpawnPlayerUnitPacket
             {
-                Type2 = InGamePacketType.SpawnPlayerUnit,
-                PlayerId = unit.PlayerId, 
-                FieldId = unit.FieldId,
-                CurrentHp = unit.CurrentHp, 
-                Position = unit.Position,
-                Rotation = unit.Rotation, 
-                WeaponIndex = unit.CurrentWeaponPrefabIndex,
-                LastUpdateTime = DateTime.UtcNow.ToString("o")
+                PlayerId = unit.PlayerId,
+                FieldId  = unit.FieldId,
+                PosX     = unit.Position.X,
+                PosY     = unit.Position.Y,
+                PosZ     = unit.Position.Z,
+                RotX     = unit.Rotation.X,
+                RotY     = unit.Rotation.Y,
+                RotZ     = unit.Rotation.Z,
+                CurrentHp   = unit.CurrentHp,
+                MaxHp       = unit.MaxHp,
+                WeaponIndex = (int)unit.CurrentWeaponPrefabIndex,
             }, roomData);
             startPosX += 10;
-            
+
             // 인게임 UI 초기화
-            Send(new UIPacket
+            SendProto((uint)InGamePacketType.UIUpdateResponse, new UIUpdateResponsePacket
             {
-                Type2 = InGamePacketType.UIUpdateResponse,
-                PlayerId = unit.PlayerId, 
-                FieldId = unit.FieldId,
-                CurrentHp = unit.CurrentHp, 
-                Position = unit.Position,
-                Rotation = unit.Rotation, 
-                LastUpdateTime = DateTime.UtcNow.ToString("o"),
-                
-                Gold = unit.Gold,
-                Level =  unit.Level,
-                Exp = unit.Exp,
-                RequiredExp = unit.RequiredExp,
-                WeaponPrefabIndex_1 = unit.WeaponPrefabIndex_1,
-                WeaponPrefabIndex_2 = unit.WeaponPrefabIndex_2,
-                WeaponPrefabIndex_3 = unit.WeaponPrefabIndex_3,
-                WeaponPrefabIndex_4 = unit.WeaponPrefabIndex_4,
-                
-                KillCount =  unit.KillCount,
-                DeathCount = unit.DeathCount,
-                CSCount = unit.CSCount,
-                
-            },(IPEndPoint)p.ClientEp);
+                PlayerId           = unit.PlayerId,
+                FieldId            = unit.FieldId,
+                PlayerName         = unit.PlayerName ?? "",
+                PlayerRank         = (int)unit.PlayerRank,
+                Gold               = unit.Gold,
+                Level              = unit.Level,
+                CurrentHp          = unit.CurrentHp,
+                MaxHp              = unit.MaxHp,
+                Exp                = unit.Exp,
+                RequiredExp        = unit.RequiredExp,
+                WeaponPrefabIndex_1 = (int)unit.WeaponPrefabIndex_1,
+                WeaponPrefabIndex_2 = (int)unit.WeaponPrefabIndex_2,
+                WeaponPrefabIndex_3 = (int)unit.WeaponPrefabIndex_3,
+                WeaponPrefabIndex_4 = (int)unit.WeaponPrefabIndex_4,
+                KillCount          = unit.KillCount,
+                DeathCount         = unit.DeathCount,
+                CSCount            = unit.CSCount,
+            }, (IPEndPoint)p.ClientEp);
             
         }
         
@@ -606,12 +606,17 @@ public class LobbyServer : IDisposable
             Console.WriteLine($"[LobbyServer] {roomData.RoomName} 방 제거");
     }
 
-    private void BroadcastSpawnPlayerUnit(PlayerUnitPacket packet, RoomData roomData)
+    private void BroadcastSpawnPlayerUnit(SpawnPlayerUnitPacket packet, RoomData roomData)
     {
-        string json = JsonSerializer.Serialize(packet);
-        byte[] buf  = Encoding.UTF8.GetBytes(json);
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.SpawnPlayerUnit, packet);
         foreach (var p in roomData.InRoomPlayers.Values)
             _socket.SendTo(buf, p.ClientEp);
+    }
+
+    private void SendProto<T>(uint packetType, T message, IPEndPoint ep)
+    {
+        byte[] buf = ProtobufSerializer.Serialize(packetType, message);
+        _socket.SendTo(buf, ep);
     }
 
     #endregion
