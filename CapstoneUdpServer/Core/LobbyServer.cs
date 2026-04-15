@@ -349,11 +349,13 @@ public class LobbyServer : IDisposable
             },(IPEndPoint)p.ClientEp);
             
         }
+        
         _inGameDataList[roomData.RoomId] = newInGameData;
 
         BroadcastDestroyRoom(new RoomPacket
         {
-            Type = LobbyPacketType.DestroyRoom, RoomId = roomData.RoomId,
+            Type = LobbyPacketType.DestroyRoom, 
+            RoomId = roomData.RoomId,
             LastUpdateTime = DateTime.UtcNow.ToString("o")
         }, roomData, true);
     }
@@ -581,7 +583,11 @@ public class LobbyServer : IDisposable
         byte[] buf  = Encoding.UTF8.GetBytes(json);
 
         foreach (var p in roomData.InRoomPlayers.Values)
+        {
+            p.SetFieldId(p.RelatedRoomId);
             p.PlayerWhereRoom(0);
+        }
+            
 
         if (isGameStart)
         {

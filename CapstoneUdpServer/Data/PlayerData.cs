@@ -17,6 +17,7 @@ public class PlayerData
     public int     PlayerId    { get; private set; }
     public PlayerRank PlayerRank { get; private set; }
     public int     RelatedRoomId { get; private set; }
+    public int      FieldId   { get; private set; }
     public EndPoint ClientEp  { get; private set; }
     public bool    IsGameReady;
 
@@ -29,4 +30,9 @@ public class PlayerData
     }
 
     public void PlayerWhereRoom(int roomId) => RelatedRoomId = roomId;
+    
+    public void SetFieldId(int relatedRoomId)
+    {
+        FieldId = relatedRoomId;
+    }
 }

@@ -30,13 +30,21 @@ public class PacketJob : IJob
     {
         try
         {
-            string      jsonData = Encoding.UTF8.GetString(_buffer, 0, _bufferSize);
-            BasePacket? header   = JsonSerializer.Deserialize<BasePacket>(jsonData, Default);
+            if (_buffer[0] == '{')
+            {
+                string      jsonData = Encoding.UTF8.GetString(_buffer, 0, _bufferSize);
+                BasePacket? header   = JsonSerializer.Deserialize<BasePacket>(jsonData, Default);
 
-            if (header?.Type == LobbyPacketType.None)
-                _inGameServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
+                if (header?.Type == LobbyPacketType.None)
+                    _inGameServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
+                else
+                    _lobbyServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
+            }
             else
-                _lobbyServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
+            {
+                _inGameServer.ProcessPacket(_buffer, _bufferSize, _endPoint);
+            }
+            
         }
         catch (Exception e)
         {

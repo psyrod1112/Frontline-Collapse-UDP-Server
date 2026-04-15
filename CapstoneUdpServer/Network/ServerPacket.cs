@@ -48,10 +48,23 @@ public enum InGamePacketType
     UIUpdateRequest,
     UIUpdateResponse,
     
+    //플레이어 입력
+    PlayerInput,
+    MoveConfirm,
+    RemotePlayerState,
+    
+    NpcState,
+    MissileState,
+    
+    SpawnNpcRequest,
+    SpawnNpc,
+    SpawnMissileRequest,
+    SpawnMissile,
+    
 }
 
 public enum HitTargetType  { Player, MovingUnit, Building, Environment }
-public enum PlayerAnimState { Idle, Walk, Run, Jump, Crouch, Attack, Die }
+public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead}
 
 #region 로비 패킷
 
@@ -103,7 +116,7 @@ public class InGamePacket : BasePacket
     public int     FieldId       { get; set; }
     public int     PlayerId      { get; set; }
     public float   CurrentHp     { get; set; }
-    public float   MaxHp     { get; set; }
+    public float   MaxHp         { get; set; }
     public float   DamageAmount  { get; set; }
     public float   DamagedAmount { get; set; }
     public Vector3 Position      { get; set; }
