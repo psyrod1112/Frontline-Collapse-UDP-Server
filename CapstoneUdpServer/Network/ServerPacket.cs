@@ -60,11 +60,28 @@ public enum InGamePacketType
     SpawnNpc,
     SpawnMissileRequest,
     SpawnMissile,
-    
-}
+
+    // 이벤트 (클라 → 서버 → 브로드캐스트)
+    FireEvent,
+    MeleeEvent,
+    ReloadEvent,
+    WeaponChange,
+    BuildingPlace,
+    BuildingDestroy,
+    DamageEvent,
+    DeathEvent,
+        GoldUpdate,
+        MissileExplode,
+        HotkeySlotSave,
+        MissileLoadRequest,
+        MissileLoadResponse,
+        MissileLaunch,
+        MissileHitRequest,
+        DamageResult,
+    }
 
 public enum HitTargetType  { Player, MovingUnit, Building, Environment }
-public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead}
+public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead, Melee, Reload }
 
 #region 로비 패킷
 
@@ -75,9 +92,19 @@ public class BasePacket
     public string?          LastUpdateTime { get; set; }
 }
 
-public class PlayerPacket : BasePacket
+public class ErrorPacket : BasePacket
+{
+    public string ErrorMessage { get; set; }
+    
+}
+
+public class LobbyPacket : BasePacket
 {
     public int        PlayerId      { get; set; }
+}
+
+public class PlayerPacket : LobbyPacket
+{
     public string?    PlayerName    { get; set; }
     public int        WinScore      { get; set; }
     public float      WinRate       { get; set; }
@@ -85,19 +112,17 @@ public class PlayerPacket : BasePacket
     public int        RelatedRoomId { get; set; }
 }
 
-public class RoomPacket : BasePacket
+public class RoomPacket : LobbyPacket
 {
-    public int     OwnerId            { get; set; }
     public int     RoomId             { get; set; }
     public string? RoomName           { get; set; }
     public int     RoomPlayerLimit    { get; set; }
     public int     CurrentRoomPlayers { get; set; }
 }
 
-public class GamelogPacket : BasePacket
+public class GamelogPacket : LobbyPacket
 {
     public int            LogId        { get; set; }
-    public int            MyId         { get; set; }
     public string?        MyName       { get; set; }
     public PlayerRank     MyRank       { get; set; }
     public int            EnemyId      { get; set; }
@@ -167,55 +192,55 @@ public class BuildingUnitPacket : InGamePacket
 #region 인게임 패킷 (동작)
 
 /// <summary>Position/Rotation = 현재 위치/방향, Velocity = 이동속도벡터</summary>
-public class MovePacket : InGamePacket
-{
-    public Vector3         Velocity  { get; set; }
-    public PlayerAnimState AnimState { get; set; }
-}
-
-/// <summary>총구 이펙트 브로드캐스트용. Position = 총구 위치, Rotation = 발사 방향</summary>
-public class BulletFirePacket : InGamePacket { }
-
-/// <summary>Raycast 피격 결과. 서버가 데미지 계산 후 브로드캐스트</summary>
-public class BulletHitPacket : InGamePacket
-{
-    public HitTargetType HitTargetType { get; set; }
-    public int           TargetId      { get; set; }
-    public Vector3       HitPoint      { get; set; }
-    public float         Damage        { get; set; }
-}
-
-/// <summary>Position = 배치 좌표, PrefabIndex = 건물 종류, Rotation = 방향</summary>
-public class BuildingCreatePacket : InGamePacket
-{
-    public int   BuildingId { get; set; }
-    public float MaxHp      { get; set; }
-}
-
-public class BuildingDestroyPacket : InGamePacket
-{
-    public int BuildingId { get; set; }
-}
-
-/// <summary>Position = 발사 위치, Rotation = 발사 방향, PrefabIndex = 미사일 종류</summary>
-public class MissileFirePacket : InGamePacket
-{
-    public int     MissileId { get; set; }
-    public Vector3 Force     { get; set; }
-}
-
-/// <summary>폭발 범위 내 다중 피격을 하나의 패킷으로 전송</summary>
-public class MissileExplosionPacket : InGamePacket
-{
-    public int           MissileId { get; set; }
-    public List<HitInfo> HitList   { get; set; } = new();
-}
-
-public class HitInfo
-{
-    public HitTargetType TargetType { get; set; }
-    public int           TargetId   { get; set; }
-    public float         Damage     { get; set; }
-}
+// public class MovePacket : InGamePacket
+// {
+//     public Vector3         Velocity  { get; set; }
+//     public PlayerAnimState AnimState { get; set; }
+// }
+//
+// /// <summary>총구 이펙트 브로드캐스트용. Position = 총구 위치, Rotation = 발사 방향</summary>
+// public class BulletFirePacket : InGamePacket { }
+//
+// /// <summary>Raycast 피격 결과. 서버가 데미지 계산 후 브로드캐스트</summary>
+// public class BulletHitPacket : InGamePacket
+// {
+//     public HitTargetType HitTargetType { get; set; }
+//     public int           TargetId      { get; set; }
+//     public Vector3       HitPoint      { get; set; }
+//     public float         Damage        { get; set; }
+// }
+//
+// /// <summary>Position = 배치 좌표, PrefabIndex = 건물 종류, Rotation = 방향</summary>
+// public class BuildingCreatePacket : InGamePacket
+// {
+//     public int   BuildingId { get; set; }
+//     public float MaxHp      { get; set; }
+// }
+//
+// public class BuildingDestroyPacket : InGamePacket
+// {
+//     public int BuildingId { get; set; }
+// }
+//
+// /// <summary>Position = 발사 위치, Rotation = 발사 방향, PrefabIndex = 미사일 종류</summary>
+// public class MissileFirePacket : InGamePacket
+// {
+//     public int     MissileId { get; set; }
+//     public Vector3 Force     { get; set; }
+// }
+//
+// /// <summary>폭발 범위 내 다중 피격을 하나의 패킷으로 전송</summary>
+// public class MissileExplosionPacket : InGamePacket
+// {
+//     public int           MissileId { get; set; }
+//     public List<HitInfo> HitList   { get; set; } = new();
+// }
+//
+// public class HitInfo
+// {
+//     public HitTargetType TargetType { get; set; }
+//     public int           TargetId   { get; set; }
+//     public float         Damage     { get; set; }
+// }
 
 #endregion

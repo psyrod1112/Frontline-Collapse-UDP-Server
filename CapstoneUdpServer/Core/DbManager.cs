@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CapstoneUdpServer.Data;
 using Npgsql;
 using StackExchange.Redis;
@@ -14,7 +15,7 @@ public class DB_players
     public float Win_rate { get; set; }
     public PlayerRank Player_rank { get; set; }
     public DateTime Created_at { get; set; }
-
+   
     // win_rate, player_rank는 DB에 저장하지 않고 win_counts/lose_counts/win_score로 계산
     public DB_players(int player_id, string player_name, int win_score, int win_counts, int lose_counts,
         DateTime created_at)
@@ -117,6 +118,9 @@ public class DbManager : IDisposable
     private ConnectionMultiplexer? _redis;
     private IDatabase? _db;
 
+    public List<string> OnlineUsersName = new List<string>();
+
+
     private string connectionString =
         "Host=127.0.0.1;Port=5432;Database=frontline_collapse;Username=postgres;Password=tkddbs321!";
 
@@ -144,6 +148,11 @@ public class DbManager : IDisposable
         try
         {
             _redis = await ConnectionMultiplexer.ConnectAsync("localhost:6379");
+            if (_redis == null || !_redis.IsConnected)
+            {
+                Console.WriteLine("[DbManager] ConnectRedisAsync: Redis 연결 실패!");
+                return false;
+            }
             _db = _redis.GetDatabase();
             Console.WriteLine("[DbManager] ConnectRedisAsync: Redis 연결 완료");
             return true;
@@ -339,8 +348,13 @@ public class DbManager : IDisposable
     // Redis Hash에서 플레이어 데이터 조회 후 Redis_players로 변환
     public async Task<Redis_playerRankInfo?> SearchPlayerFromRedis(string playerName)
     {
+        
         HashEntry[] entries = await _db.HashGetAllAsync($"player:{playerName}");
-
+        
+        // 빈 엔트리 - 예외 처리
+        if (entries.Length == 0)
+            return null;
+        
         // Dictionary로 변환해서 필드명으로 접근
         var dict = entries.ToDictionary(e => e.Name.ToString(), e => e.Value);
 

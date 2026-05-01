@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Numerics;
 
@@ -12,7 +13,7 @@ public class PlayerUnitData
     public string?  PlayerName => _playerData.PlayerName;
     public EndPoint IpEndPoint => _playerData.ClientEp;
     public PlayerRank PlayerRank => _playerData.PlayerRank;
-    public int     FieldId           { get; }
+    public int     FieldId            => _playerData.FieldId;
     
     public int     Gold { get; set; }
     public int     Level { get; set; }
@@ -30,11 +31,17 @@ public class PlayerUnitData
     public int KillCount {get; set; }
     public int DeathCount {get; set; }
     public int CSCount {get; set; }
+    public int GuidedMissileCount { get; set; }
+    public int NukeMissileCount { get; set; }
+
+    
+
+    public ConcurrentDictionary<int, InGameBuildingRecord> Buildings { get; } = new();
 
     public PlayerUnitData(PlayerData playerData, int fieldId)
     {
-        _playerData      = playerData;
-        FieldId          = fieldId;
+        _playerData = playerData;
+        _playerData.SetFieldId(fieldId);
 
         Gold = 0;
         Level = 1;
@@ -48,12 +55,12 @@ public class PlayerUnitData
         MaxHp            = 100f;
         CurrentHp        = 100f;
         CurrentWeaponPrefabIndex = WeaponType.Rifle;
-        Position         = Vector3.Zero;
-        Rotation         = Vector3.Zero;
 
         KillCount = 0;
         DeathCount = 0;
         CSCount = 0;
+        GuidedMissileCount = 3;
+        NukeMissileCount = 1;
     }
     
     private float CalcMaxExp(int level)

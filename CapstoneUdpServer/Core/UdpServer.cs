@@ -122,18 +122,31 @@ public class UdpServer : IDisposable
         {
             while (_isRunning)
             {
-                int len = _socket.ReceiveFrom(buffer, ref clientEp);
-                if (len > 0)
+                try
                 {
-                    byte[] packet = new byte[len];
-                    Array.Copy(buffer, packet, len);
-                    _jobQueue.Enqueue(new PacketJob(LobbyServer, InGameServer, packet, len, (IPEndPoint)clientEp));
-                    Console.WriteLine("[UdpServer] 패킷 수신 → 큐에 추가");
+                    int len = _socket.ReceiveFrom(buffer, ref clientEp);
+                    if (len > 0)
+                    {
+                        byte[] packet = new byte[len];
+                        Array.Copy(buffer, packet, len);
+                        _jobQueue.Enqueue(new PacketJob(LobbyServer, InGameServer, packet, len, (IPEndPoint)clientEp));
+                        Console.WriteLine("[UdpServer] 패킷 수신 → 큐에 추가");
+                    }
+                }
+                catch (SocketException se) when (se.SocketErrorCode == SocketError.ConnectionReset)
+                {
+                    // Windows ICMP "Port Unreachable": 클라이언트 소켓이 닫힌 후 발생하는 정상적인 현상
+                    // 무시하고 루프 계속
+                    Console.WriteLine($"[UdpServer] 클라이언트 연결 종료 감지 (ICMP) — 루프 유지");
+                }
+                catch (SocketException se)
+                {
+                    Console.WriteLine("[UdpServer] ReceiveLoop 소켓 오류: " + se.Message);
+                    break; // 진짜 소켓 오류면 루프 종료
                 }
             }
         }
-        catch (SocketException se) { Console.WriteLine("[UdpServer] ReceiveLoop 소켓 오류: " + se.Message); }
-        catch (Exception e)        { Console.WriteLine("[UdpServer] ReceiveLoop 오류: " + e.Message); }
+        catch (Exception e) { Console.WriteLine("[UdpServer] ReceiveLoop 오류: " + e.Message); }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);

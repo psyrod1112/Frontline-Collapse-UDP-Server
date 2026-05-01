@@ -1,9 +1,10 @@
 ﻿using CapstoneUdpServer.Data;
+using System.Collections.Generic;
 using ProtoBuf;
 
 namespace CapstoneUdpServer.Network
 {
-    public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead }
+    public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead, Melee, Reload }
     public enum HitTargetType { Player, MovingUnit, Building, Environment }
     
     [ProtoContract]
@@ -59,7 +60,9 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(9)] public float RotationY;
         [ProtoMember(10)] public PlayerAnimState AnimState;
         [ProtoMember(11)] public WeaponType WeaponIndex;
-        
+        [ProtoMember(12)] public float CameraPitch;
+        [ProtoMember(13)] public bool IsCrouching;
+
     }
 
     [ProtoContract]
@@ -168,10 +171,117 @@ namespace CapstoneUdpServer.Network
     }
 
     [ProtoContract]
+    public class WeaponChangePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int WeaponIndex;
+    }
+
+    [ProtoContract]
+    public class HotkeySavePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int Slot1;
+        [ProtoMember(4)] public int Slot2;
+        [ProtoMember(5)] public int Slot3;
+        [ProtoMember(6)] public int Slot4;
+    }
+
+    [ProtoContract]
     public class UIUpdateRequestPacket
     {
         [ProtoMember(1)] public int PlayerId;
         [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class BuildingPlacePacket
+    {
+        [ProtoMember(1)] public int   BuildingId;
+        [ProtoMember(2)] public int   OwnerId;
+        [ProtoMember(3)] public int   BuildingType;
+        [ProtoMember(4)] public float PosX;
+        [ProtoMember(5)] public float PosY;
+        [ProtoMember(6)] public float PosZ;
+        [ProtoMember(7)] public float RotY;
+    }
+
+    [ProtoContract]
+    public class BuildingDestroyPacket
+    {
+        [ProtoMember(1)] public int BuildingId;
+        [ProtoMember(2)] public int BuildingType;
+        [ProtoMember(3)] public int DestroyerId;
+    }
+
+    [ProtoContract]
+    public class MissileLoadRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int BuildingId;
+        [ProtoMember(3)] public int MissileId;
+        [ProtoMember(4)] public int MissileType;
+        [ProtoMember(5)] public bool IsLoaded;
+    }
+
+    [ProtoContract]
+    public class MissileLoadResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int BuildingId;
+        [ProtoMember(3)] public int MissileId;
+        [ProtoMember(4)] public int MissileType;
+        [ProtoMember(5)] public bool IsLoaded;
+        [ProtoMember(6)] public bool Success;
+        [ProtoMember(7)] public int RemainingMissileCount;
+    }
+
+    [ProtoContract]
+    public class MissileLaunchPacket
+    {
+        [ProtoMember(1)] public int MissileId;
+        [ProtoMember(2)] public int MissileType;
+        [ProtoMember(3)] public int OwnerId;
+        [ProtoMember(4)] public int BuildingId;
+        [ProtoMember(5)] public float OriginX;
+        [ProtoMember(6)] public float OriginY;
+        [ProtoMember(7)] public float OriginZ;
+        [ProtoMember(8)] public float VelocityX;
+        [ProtoMember(9)] public float VelocityY;
+        [ProtoMember(10)] public float VelocityZ;
+        [ProtoMember(11)] public float TargetX;
+        [ProtoMember(12)] public float TargetY;
+        [ProtoMember(13)] public float TargetZ;
+    }
+
+    [ProtoContract]
+    public class MissileHitTargetPacket
+    {
+        [ProtoMember(1)] public int TargetId;
+        [ProtoMember(2)] public int TargetType;
+    }
+
+    [ProtoContract]
+    public class MissileHitRequestPacket
+    {
+        [ProtoMember(1)] public int MissileId;
+        [ProtoMember(2)] public int MissileType;
+        [ProtoMember(3)] public int OwnerId;
+        [ProtoMember(4)] public int DirectTargetId;
+        [ProtoMember(5)] public int DirectTargetType;
+        [ProtoMember(6)] public List<MissileHitTargetPacket> SplashTargets = new();
+    }
+
+    [ProtoContract]
+    public class DamageResultPacket
+    {
+        [ProtoMember(1)] public int AttackerId;
+        [ProtoMember(2)] public int TargetId;
+        [ProtoMember(3)] public int TargetType;
+        [ProtoMember(4)] public int Damage;
+        [ProtoMember(5)] public float CurrentHp;
+        [ProtoMember(6)] public float MaxHp;
     }
 
     [ProtoContract]

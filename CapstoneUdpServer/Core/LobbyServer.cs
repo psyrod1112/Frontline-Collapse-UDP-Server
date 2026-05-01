@@ -9,6 +9,7 @@ using CapstoneUdpServer.Network;
 
 namespace CapstoneUdpServer.Core;
 
+
 public class LobbyServer : IDisposable
 {
     private readonly Socket                                  _socket;
@@ -16,6 +17,7 @@ public class LobbyServer : IDisposable
     private readonly ConcurrentDictionary<int, InGameData>  _inGameDataList;
     private readonly ConcurrentDictionary<int, RoomData>    _roomLists = new();
     private readonly DbManager                              _dbManager;
+    
 
     private int _nextRoomId;
     private int _currentPlayerCounts;
@@ -30,6 +32,17 @@ public class LobbyServer : IDisposable
         _store          = store;
         _inGameDataList = inGameDataList;
         _dbManager      = dbManager;
+    }
+    
+    public int[][] PlayerSpawnPos()
+    {
+        int[][] positions = new int[4][];
+        positions[0] = new[] {  150, 15,  150, 225 };  // 우측 앞  → 225도 방향 바라봄
+        positions[1] = new[] { -200, 15, -200,  45 };  // 좌측 뒤  →  45도 방향 바라봄
+        positions[2] = new[] { -200, 15,  150, 135 };  // 좌측 앞  → 135도 방향 바라봄
+        positions[3] = new[] {  150, 15, -200, 315 };  // 우측 뒤  → 315도 방향 바라봄
+        
+        return positions;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -93,9 +106,20 @@ public class LobbyServer : IDisposable
     {
         if (_currentPlayerCounts > 100)        { Console.WriteLine("[LobbyServer] 서버 인원 초과"); return; }
         if (packet == null)                    { Console.WriteLine("[LobbyServer] HandleConnection: 패킷 null"); return; }
-
         Redis_playerRankInfo? data = await _dbManager.SearchPlayerFromDB(packet.PlayerName);
         if (data == null) return;
+        
+        if (_dbManager.OnlineUsersName.Contains(packet.PlayerName))
+        {
+            Send(new ErrorPacket
+            {
+                ErrorMessage = "이미 사용중인 아이디입니다.",
+                LastUpdateTime = DateTime.UtcNow.ToString("o")
+            }, clientEp);
+            return;
+        }
+        
+        _dbManager.OnlineUsersName.Add(packet.PlayerName);
 
         // 로비 pool에 추가 (연결은 이미 수립된 상태)
         _store.AddToLobby(data.Player_id, new PlayerData(packet.PlayerName, data.Player_id, data.Player_rank, clientEp));
@@ -123,29 +147,35 @@ public class LobbyServer : IDisposable
         // 어느 pool에 있든 제거
         if (_store.Remove(packet.PlayerId))
             Console.WriteLine($"[LobbyServer] {packet.PlayerName} pool에서 제거");
-
+        
+        _dbManager.OnlineUsersName.Remove(packet.PlayerName);
+        
         Send(new PlayerPacket { Type = LobbyPacketType.Despawn, LastUpdateTime = DateTime.UtcNow.ToString("o") }, clientEp);
     }
 
     private void HandleCreateRequest(RoomPacket? packet, IPEndPoint clientEp)
     {
         if (packet == null || _roomLists.Count > 20) return;
-        if (!_store.TryGetLobby(packet.OwnerId, out var playerData)) return;
+        if (!_store.TryGetLobby(packet.PlayerId, out var playerData)) return;
 
         int roomId = Interlocked.Increment(ref _nextRoomId);
-        var newRoom = new RoomData(packet.OwnerId, roomId, packet.RoomName,
+        var newRoom = new RoomData(packet.PlayerId, roomId, packet.RoomName,
                                    packet.RoomPlayerLimit, packet.CurrentRoomPlayers);
+
+        // 상태 변경 (PlayerWhereRoom이 RelatedRoomId를 설정)
         playerData.PlayerWhereRoom(roomId);
         newRoom.AddPlayer(playerData);
         _roomLists[roomId] = newRoom;
-
+        
+        // 브로드캐스트 먼저 — 생성자가 아직 LobbyPlayers에 있을 때 전송
         BroadcastCreateRoomPacket(new RoomPacket
         {
-            Type = LobbyPacketType.CreateRoom, OwnerId = newRoom.OwnerId, RoomId = newRoom.RoomId,
+            Type = LobbyPacketType.CreateRoom, PlayerId = newRoom.OwnerId, RoomId = newRoom.RoomId,
             RoomName = newRoom.RoomName, RoomPlayerLimit = newRoom.RoomPlayerLimit,
             CurrentRoomPlayers = newRoom.CurrentRoomPlayers, LastUpdateTime = DateTime.UtcNow.ToString("o")
         });
 
+        // EnterRoom은 생성자에게 직접 전송
         Send(new PlayerPacket
         {
             Type = LobbyPacketType.EnterRoom,
@@ -269,7 +299,7 @@ public class LobbyServer : IDisposable
     private void HandleGameStart(RoomPacket? packet, IPEndPoint clientEp)
     {
         if (packet == null) return;
-        if (!_store.TryGetLobby(packet.OwnerId, out var playerData)) return;
+        if (!_store.TryGetLobby(packet.PlayerId, out var playerData)) return;
         if (!_roomLists.TryGetValue(packet.RoomId, out var roomData)) return;
         if (roomData.OwnerId != playerData.PlayerId) return;
         if (roomData.CurrentRoomPlayers != roomData.RoomPlayerLimit) return;
@@ -302,12 +332,13 @@ public class LobbyServer : IDisposable
         }
 
         var newInGameData = new InGameData();
-        int startPosX = -10;
+        var spawnPos = PlayerSpawnPos();
+        int playerIdx = 0;
         foreach (var p in roomData.InRoomPlayers.Values)
         {
             var unit = new PlayerUnitData(p, roomData.RoomId);
             newInGameData.PlayerUnitDataMap[p.PlayerId] = unit;
-            unit.SetPosition(unit.Position + new Vector3(startPosX, 5, 0), unit.Rotation);
+            unit.SetPosition(new Vector3(spawnPos[playerIdx][0], spawnPos[playerIdx][1], spawnPos[playerIdx][2]) , new Vector3(0, spawnPos[playerIdx][3], 0));
             
             // 인게임 플레이어 생성.
             BroadcastSpawnPlayerUnit(new SpawnPlayerUnitPacket
@@ -324,7 +355,7 @@ public class LobbyServer : IDisposable
                 MaxHp       = unit.MaxHp,
                 WeaponIndex = (int)unit.CurrentWeaponPrefabIndex,
             }, roomData);
-            startPosX += 10;
+            playerIdx++;
 
             // 인게임 UI 초기화
             SendProto((uint)InGamePacketType.UIUpdateResponse, new UIUpdateResponsePacket
@@ -350,7 +381,7 @@ public class LobbyServer : IDisposable
             
         }
         
-        _inGameDataList[roomData.RoomId] = newInGameData;
+          _inGameDataList[roomData.RoomId] = newInGameData;
 
         BroadcastDestroyRoom(new RoomPacket
         {
@@ -367,7 +398,7 @@ public class LobbyServer : IDisposable
     private async Task HandleGameOver(GamelogPacket? packet, IPEndPoint clientEp)
     {
         if (packet == null) return;
-        if (!_store.TryGetInGame(packet.MyId, out var myData))
+        if (!_store.TryGetInGame(packet.PlayerId, out var myData))
         {
             Console.WriteLine("[LobbyServer] HandleGameOver: 인게임 pool에 플레이어 없음");
             return;
@@ -395,7 +426,7 @@ public class LobbyServer : IDisposable
         foreach (var p in players)
         {
             // 패킷 발신자의 GameResult 기준으로 승패 결정
-            bool isWinner  = p.PlayerId == packet.MyId ? packet.GameResult : !packet.GameResult;
+            bool isWinner  = p.PlayerId == packet.PlayerId ? packet.GameResult : !packet.GameResult;
             var  enemy     = players.First(x => x.PlayerId != p.PlayerId);
             PlayerRank enemyRank = rankCache.GetValueOrDefault(enemy.PlayerId, PlayerRank.None);
 
@@ -480,7 +511,7 @@ public class LobbyServer : IDisposable
         {
             Send(new RoomPacket
             {
-                Type = LobbyPacketType.CreateRoom, OwnerId = room.OwnerId, RoomId = room.RoomId,
+                Type = LobbyPacketType.CreateRoom, PlayerId = room.OwnerId, RoomId = room.RoomId,
                 RoomName = room.RoomName ?? $"GameRoom{room.RoomId}",
                 RoomPlayerLimit = room.RoomPlayerLimit, CurrentRoomPlayers = room.CurrentRoomPlayers,
                 LastUpdateTime = DateTime.UtcNow.ToString("o")
