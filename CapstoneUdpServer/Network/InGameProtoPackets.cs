@@ -274,14 +274,56 @@ namespace CapstoneUdpServer.Network
     }
 
     [ProtoContract]
-    public class DamageResultPacket
+    public class DamageEventPacket
     {
-        [ProtoMember(1)] public int AttackerId;
-        [ProtoMember(2)] public int TargetId;
-        [ProtoMember(3)] public int TargetType;
-        [ProtoMember(4)] public int Damage;
+        [ProtoMember(1)] public int   TargetId;
+        [ProtoMember(2)] public int   TargetType;
+        [ProtoMember(3)] public int   AttackerId;
+        [ProtoMember(4)] public int   Damage;
         [ProtoMember(5)] public float CurrentHp;
         [ProtoMember(6)] public float MaxHp;
+        [ProtoMember(7)] public float HitPosX;
+        [ProtoMember(8)] public float HitPosY;
+        [ProtoMember(9)] public float HitPosZ;
+        [ProtoMember(10)] public float HitNormalX;
+        [ProtoMember(11)] public float HitNormalY;
+        [ProtoMember(12)] public float HitNormalZ;
+        [ProtoMember(13)] public int  WeaponType;
+    }
+
+    [ProtoContract]
+    public class DamageResultPacket
+    {
+        [ProtoMember(1)] public int   AttackerId;
+        [ProtoMember(2)] public int   TargetId;
+        [ProtoMember(3)] public int   TargetType;
+        [ProtoMember(4)] public int   Damage;
+        [ProtoMember(5)] public float CurrentHp;
+        [ProtoMember(6)] public float MaxHp;
+        [ProtoMember(7)] public float HitPosX;
+        [ProtoMember(8)] public float HitPosY;
+        [ProtoMember(9)] public float HitPosZ;
+        [ProtoMember(10)] public float HitNormalX;
+        [ProtoMember(11)] public float HitNormalY;
+        [ProtoMember(12)] public float HitNormalZ;
+        [ProtoMember(13)] public bool IsDead;
+    }
+
+    [ProtoContract]
+    public class DeathEventPacket
+    {
+        [ProtoMember(1)] public int TargetId;
+        [ProtoMember(2)] public int TargetType;
+        [ProtoMember(3)] public int KillerId;
+        [ProtoMember(4)] public int GoldReward;
+    }
+
+    [ProtoContract]
+    public class GoldUpdatePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int GoldAmount;
+        [ProtoMember(3)] public int TotalGold;
     }
 
     [ProtoContract]

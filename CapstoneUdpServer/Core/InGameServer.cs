@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -23,10 +24,6 @@ public class InGameServer
         _inGameDataList = inGameDataList;
         _store          = store;
     }
-
-    
-
-    // ─────────────────────────────────────────────────────────────
 
     public void ProcessPacket(byte[] buffer, int bufferSize, IPEndPoint clientEp)
     {
@@ -88,6 +85,10 @@ public class InGameServer
                 case (uint)InGamePacketType.MissileHitRequest:
                     var hitPacket = ProtobufSerializer.Deserialize<MissileHitRequestPacket>(buffer);
                     HandleMissileHitRequest(hitPacket);
+                    break;
+                case (uint)InGamePacketType.DamageEvent:
+                    var damageEventPacket = ProtobufSerializer.Deserialize<DamageEventPacket>(buffer);
+                    HandleDamageEvent(damageEventPacket);
                     break;
             }
         }
@@ -355,8 +356,63 @@ public class InGameServer
         if (!_store.TryGetInGame(packet.PlayerId, out var playerData)) return;
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
 
+        // 발사자 포함 전원에게 브로드캐스트 — 발사자 본인도 애니메이션/사운드 처리
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.FireEvent, packet);
-        inGameData.Broadcast(_socket, buf, excludePlayerId: packet.PlayerId);
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleDamageEvent(DamageEventPacket packet)
+    {
+        if (!_store.TryGetInGame(packet.AttackerId, out var playerData)) return;
+        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+
+        var weaponType = (WeaponType)packet.WeaponType;
+        var targetType = (CapstoneUdpServer.Network.HitTargetType)packet.TargetType;
+        int rawDamage  = CombatData.GetWeaponDamage(weaponType);
+
+        float currentHp, maxHp;
+        int   finalDamage;
+
+        if (targetType == CapstoneUdpServer.Network.HitTargetType.Building)
+        {
+            if (!inGameData.TryGetBuilding(packet.TargetId, out var building, out _) || building == null) return;
+
+            var buildingType = (BuildingType)building.PrefabIndex;
+            int defense = CombatData.GetBuildingStat(buildingType).Defense;
+            finalDamage     = Math.Max(1, rawDamage - defense);
+            building.CurrentHp = Math.Max(0f, building.CurrentHp - finalDamage);
+            currentHp = building.CurrentHp;
+            maxHp     = building.MaxHp;
+        }
+        else
+        {
+            if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.TargetId, out var unit)) return;
+
+            int defense = targetType == CapstoneUdpServer.Network.HitTargetType.Player ? 5 : 10;
+            finalDamage  = Math.Max(1, rawDamage - defense);
+            unit.CurrentHp = Math.Max(0f, unit.CurrentHp - finalDamage);
+            currentHp = unit.CurrentHp;
+            maxHp     = unit.MaxHp;
+        }
+
+        BroadcastDamageResult(inGameData, new DamageResultPacket
+        {
+            AttackerId = packet.AttackerId,
+            TargetId   = packet.TargetId,
+            TargetType = packet.TargetType,
+            Damage     = finalDamage,
+            CurrentHp  = currentHp,
+            MaxHp      = maxHp,
+            HitPosX    = packet.HitPosX,
+            HitPosY    = packet.HitPosY,
+            HitPosZ    = packet.HitPosZ,
+            HitNormalX = packet.HitNormalX,
+            HitNormalY = packet.HitNormalY,
+            HitNormalZ = packet.HitNormalZ,
+            // TODO: IsDead — currentHp <= 0 시 true 설정 및 DeathEventPacket 전송
+        });
+
+        // TODO: 사망 처리 — currentHp <= 0 시 DeathEventPacket 전체 브로드캐스트, GoldUpdatePacket 공격자에게 전송
     }
 
     private void HandlePlayerInput(PlayerInputPacket packet, IPEndPoint clientEp)

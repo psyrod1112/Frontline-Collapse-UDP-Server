@@ -1,9 +1,14 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
 
@@ -37,8 +42,8 @@ public class LobbyServer : IDisposable
     public int[][] PlayerSpawnPos()
     {
         int[][] positions = new int[4][];
-        positions[0] = new[] {  150, 15,  150, 225 };  // 우측 앞  → 225도 방향 바라봄
-        positions[1] = new[] { -200, 15, -200,  45 };  // 좌측 뒤  →  45도 방향 바라봄
+        positions[0] = new[] {  10, 15,  10, 225 };  // 우측 앞  → 225도 방향 바라봄
+        positions[1] = new[] { -20, 15, -20,  45 };  // 좌측 뒤  →  45도 방향 바라봄
         positions[2] = new[] { -200, 15,  150, 135 };  // 좌측 앞  → 135도 방향 바라봄
         positions[3] = new[] {  150, 15, -200, 315 };  // 우측 뒤  → 315도 방향 바라봄
         
@@ -441,6 +446,7 @@ public class LobbyServer : IDisposable
                 Console.WriteLine($"[LobbyServer] {p.PlayerName} 인게임 → 로비 pool 복귀");
 
                 Interlocked.Decrement(ref _currentPlayerCounts);
+                _dbManager.OnlineUsersName.Remove(p.PlayerName);
                 await HandleConnection(
                     new PlayerPacket { PlayerName = p.PlayerName },
                     (IPEndPoint)p.IpEndPoint);
