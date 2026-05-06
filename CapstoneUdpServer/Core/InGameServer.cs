@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
 
@@ -14,6 +16,13 @@ public class InGameServer
     private readonly Socket                                 _socket;
     private readonly ConcurrentDictionary<int, InGameData>  _inGameDataList;
     private readonly PlayerStore                            _store;
+    private volatile bool                                   _running = true;
+
+    private static readonly Random _rng                = new();
+    private const int              MaxNpcsPerField     = 40;
+    private const float            NpcMoveSpeed        = 2f;
+    private const float            NpcSpawnInterval    = 5f;
+    private const float            NpcBroadcastInterval = 0.2f;
 
     public InGameServer(
         Socket socket,
@@ -24,6 +33,8 @@ public class InGameServer
         _inGameDataList = inGameDataList;
         _store          = store;
     }
+
+    public void Stop() => _running = false;
 
     public void ProcessPacket(byte[] buffer, int bufferSize, IPEndPoint clientEp)
     {
@@ -89,6 +100,10 @@ public class InGameServer
                 case (uint)InGamePacketType.DamageEvent:
                     var damageEventPacket = ProtobufSerializer.Deserialize<DamageEventPacket>(buffer);
                     HandleDamageEvent(damageEventPacket);
+                    break;
+                case (uint)InGamePacketType.RespawnRequest:
+                    var respawnPacket = ProtobufSerializer.Deserialize<RespawnRequestPacket>(buffer);
+                    HandleRespawnRequest(respawnPacket, clientEp);
                     break;
             }
         }
@@ -370,29 +385,156 @@ public class InGameServer
         var targetType = (CapstoneUdpServer.Network.HitTargetType)packet.TargetType;
         int rawDamage  = CombatData.GetWeaponDamage(weaponType);
 
-        float currentHp, maxHp;
-        int   finalDamage;
+        float currentHp = 0, maxHp = 0;
+        int   finalDamage = 0;
 
         if (targetType == CapstoneUdpServer.Network.HitTargetType.Building)
         {
-            if (!inGameData.TryGetBuilding(packet.TargetId, out var building, out _) || building == null) return;
+            if (!inGameData.TryGetBuilding(packet.TargetId, out var building, out var buildingOwner) || building == null) return;
 
             var buildingType = (BuildingType)building.PrefabIndex;
             int defense = CombatData.GetBuildingStat(buildingType).Defense;
-            finalDamage     = Math.Max(1, rawDamage - defense);
+            finalDamage        = Math.Max(1, rawDamage - defense);
             building.CurrentHp = Math.Max(0f, building.CurrentHp - finalDamage);
             currentHp = building.CurrentHp;
             maxHp     = building.MaxHp;
+
+            if (currentHp <= 0)
+            {
+                buildingOwner?.Buildings.TryRemove(packet.TargetId, out _);
+                inGameData.BuildingOwnerIndex.TryRemove(packet.TargetId, out _);
+
+                byte[] destroyBuf = ProtobufSerializer.Serialize(
+                    (uint)InGamePacketType.BuildingDestroy,
+                    new BuildingDestroyPacket
+                    {
+                        BuildingId   = packet.TargetId,
+                        BuildingType = building.PrefabIndex,
+                        DestroyerId  = packet.AttackerId,
+                    });
+                inGameData.Broadcast(_socket, destroyBuf);
+
+                if (inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var attacker))
+                {
+                    attacker.Gold += 300;
+                    attacker.Exp  += 500;
+
+                    SendProto((uint)InGamePacketType.RewardUpdate,
+                        new RewardUpdatePacket
+                        {
+                            PlayerId   = attacker.PlayerId,
+                            GoldAmount = 300,
+                            TotalGold  = attacker.Gold,
+                            ExpAmount   = 500,
+                            TotalExp    = attacker.Exp,
+                            Level       = attacker.Level,
+                            RequiredExp = attacker.RequiredExp,
+                        },
+                        (IPEndPoint)attacker.IpEndPoint);
+                }
+            }
         }
-        else
+        else if (targetType == CapstoneUdpServer.Network.HitTargetType.MovingUnit)
+        {
+            if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc) || !npc.IsAlive) return;
+
+            finalDamage   = Math.Max(1, rawDamage);
+            npc.CurrentHp = Math.Max(0f, npc.CurrentHp - finalDamage);
+            currentHp     = npc.CurrentHp;
+            maxHp         = npc.MaxHp;
+
+            if (npc.CurrentHp <= 0f)
+            {
+                npc.IsAlive = false;
+                inGameData.NpcMap.TryRemove(packet.TargetId, out _);
+
+                byte[] deadBuf = ProtobufSerializer.Serialize(
+                    (uint)InGamePacketType.DeathEvent,
+                    new DeathEventPacket
+                    {
+                        TargetId   = packet.TargetId,
+                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.MovingUnit,
+                        KillerId   = packet.AttackerId,
+                        GoldReward = 100,
+                    });
+                inGameData.Broadcast(_socket, deadBuf);
+
+                if (inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var npcKiller))
+                {
+                    npcKiller.Gold    += 100;
+                    npcKiller.Exp     += 100;
+                    npcKiller.CSCount++;
+
+                    SendProto((uint)InGamePacketType.RewardUpdate,
+                        new RewardUpdatePacket
+                        {
+                            PlayerId   = npcKiller.PlayerId,
+                            GoldAmount = 100,
+                            TotalGold  = npcKiller.Gold,
+                            ExpAmount   = 100,
+                            TotalExp    = npcKiller.Exp,
+                            CSCount     = npcKiller.CSCount,
+                            Level       = npcKiller.Level,
+                            RequiredExp = npcKiller.RequiredExp,
+                        },
+                        (IPEndPoint)npcKiller.IpEndPoint);
+                }
+            }
+        }
+        else if (targetType == CapstoneUdpServer.Network.HitTargetType.Player)
         {
             if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.TargetId, out var unit)) return;
 
-            int defense = targetType == CapstoneUdpServer.Network.HitTargetType.Player ? 5 : 10;
-            finalDamage  = Math.Max(1, rawDamage - defense);
+            finalDamage    = Math.Max(1, rawDamage - 5);
             unit.CurrentHp = Math.Max(0f, unit.CurrentHp - finalDamage);
-            currentHp = unit.CurrentHp;
-            maxHp     = unit.MaxHp;
+            currentHp      = unit.CurrentHp;
+            maxHp          = unit.MaxHp;
+
+            if (unit.CurrentHp <= 0f)
+            {
+                unit.DeathCount++;
+
+                byte[] deadBuf = ProtobufSerializer.Serialize(
+                    (uint)InGamePacketType.DeathEvent,
+                    new DeathEventPacket
+                    {
+                        TargetId   = packet.TargetId,
+                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.Player,
+                        KillerId   = packet.AttackerId,
+                        GoldReward = 200,
+                    });
+                inGameData.Broadcast(_socket, deadBuf);
+
+                SendProto((uint)InGamePacketType.DeathUpdate,
+                    new DeathUpdatePacket
+                    {
+                        PlayerId   = unit.PlayerId,
+                        DeathCount = unit.DeathCount,
+                    },
+                    (IPEndPoint)unit.IpEndPoint);
+                unit.isDead = true;
+
+                if (inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var playerKiller))
+                {
+                    playerKiller.Gold      += 200;
+                    playerKiller.Exp       += 200;
+                    playerKiller.KillCount++;
+
+                    SendProto((uint)InGamePacketType.RewardUpdate,
+                        new RewardUpdatePacket
+                        {
+                            PlayerId   = playerKiller.PlayerId,
+                            GoldAmount = 200,
+                            TotalGold  = playerKiller.Gold,
+                            ExpAmount   = 200,
+                            TotalExp    = playerKiller.Exp,
+                            KillCount   = playerKiller.KillCount,
+                            Level       = playerKiller.Level,
+                            RequiredExp = playerKiller.RequiredExp,
+                        },
+                        (IPEndPoint)playerKiller.IpEndPoint);
+                }
+            }
         }
 
         BroadcastDamageResult(inGameData, new DamageResultPacket
@@ -412,7 +554,23 @@ public class InGameServer
             // TODO: IsDead — currentHp <= 0 시 true 설정 및 DeathEventPacket 전송
         });
 
-        // TODO: 사망 처리 — currentHp <= 0 시 DeathEventPacket 전체 브로드캐스트, GoldUpdatePacket 공격자에게 전송
+        // TODO: 사망 처리 — Player/NPC currentHp <= 0 시 DeathEventPacket 전체 브로드캐스트, RewardUpdatePacket 공격자에게 전송
+    }
+
+    private void HandleRespawnRequest(RespawnRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_store.TryGetInGame(packet.PlayerId, out var playerData)) return;
+        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+
+        unit.isDead    = false;
+        unit.CurrentHp = unit.MaxHp;
+
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.RespawnResponse,
+            new RespawnResponsePacket { PlayerId = packet.PlayerId });
+        inGameData.Broadcast(_socket, buf, excludePlayerId: packet.PlayerId);
+
+        Console.WriteLine($"[Respawn] PlayerId={packet.PlayerId} 리스폰 브로드캐스트 완료 (HP={unit.MaxHp})");
     }
 
     private void HandlePlayerInput(PlayerInputPacket packet, IPEndPoint clientEp)
@@ -423,6 +581,7 @@ public class InGameServer
             return;
         }
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+        if (inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unitCheck) && unitCheck.isDead) return;
 
         SendProto((uint)InGamePacketType.MoveConfirm, new PlayerMoveConfirmPacket
         {
@@ -432,7 +591,6 @@ public class InGameServer
             PosY      = packet.PosY,
             PosZ      = packet.PosZ,
             RotationY = packet.RotationY,
-            AnimState = packet.AnimState,
         }, clientEp);
 
         byte[] remoteBuf = ProtobufSerializer.Serialize((uint)InGamePacketType.RemotePlayerState, new RemotePlayerStatePacket
@@ -444,12 +602,215 @@ public class InGameServer
             PosZ        = packet.PosZ,
             RotationY   = packet.RotationY,
             CameraPitch = packet.CameraPitch,
-            AnimState   = packet.AnimState,
             WeaponIndex = packet.WeaponIndex,
             IsCrouching = packet.IsCrouching,
         });
         inGameData.Broadcast(_socket, remoteBuf, excludePlayerId: packet.PlayerId);
+
+        // 서버 측 플레이어 위치 갱신 — NPC 추적 거리 계산에 사용
+        if (inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit))
+            unit.SetPosition(
+                new System.Numerics.Vector3(packet.PosX, packet.PosY, packet.PosZ),
+                new System.Numerics.Vector3(0, packet.RotationY, 0));
     }
+
+    // ─────────────────────────────────────────────────────────────
+    #region NPC
+
+    private const float NpcChaseRange     = 15f;
+    private const float NpcChaseExitRange = 20f;
+
+    public void StartNpcLoop(int fieldId, InGameData inGameData)
+    {
+        Task.Run(async () =>
+        {
+            float spawnTimer     = NpcSpawnInterval; // 첫 틱에 즉시 스폰 시도
+            float broadcastTimer = 0f;
+            var   lastTime       = DateTime.UtcNow;
+
+            while (_running)
+            {
+                await Task.Delay(100);
+
+                var   now = DateTime.UtcNow;
+                float dt  = (float)(now - lastTime).TotalSeconds;
+                lastTime  = now;
+
+                if (inGameData.PlayerUnitDataMap.IsEmpty) break;
+
+                spawnTimer     += dt;
+                broadcastTimer += dt;
+
+                if (spawnTimer >= NpcSpawnInterval)
+                {
+                    spawnTimer = 0f;
+                    TrySpawnNpc(fieldId, inGameData);
+                }
+
+                if (broadcastTimer >= NpcBroadcastInterval)
+                {
+                    broadcastTimer = 0f;
+                    TickAndBroadcastNpcs(inGameData, NpcBroadcastInterval);
+                }
+            }
+            Console.WriteLine($"[NPC] fieldId={fieldId} NPC 루프 종료");
+        });
+    }
+
+    private void TrySpawnNpc(int fieldId, InGameData inGameData)
+    {
+        int alive = 0;
+        foreach (var kv in inGameData.NpcMap)
+            if (kv.Value.IsAlive) alive++;
+        if (alive >= MaxNpcsPerField) return;
+
+        int   npcId = inGameData.NextNpcId();
+        // TODO: 스폰 위치 추후 변경 예정 (맵 스폰 포인트 지정 방식으로 교체)
+        float angle  = (float)(_rng.NextDouble() * Math.PI * 2);
+        float radius = 15f + (float)(_rng.NextDouble() * 30f);
+        var   pos    = new System.Numerics.Vector3(
+            (float)Math.Sin(angle) * radius,
+            2f,
+            (float)Math.Cos(angle) * radius);
+
+        var npc = new NpcData { NpcId = npcId, NpcType = 0, Position = pos };
+        npc.PickNewDirection();
+        inGameData.NpcMap[npcId] = npc;
+
+        var buf = ProtobufSerializer.Serialize((uint)InGamePacketType.SpawnNpc, new SpawnNpcPacket
+        {
+            NpcId   = npcId,
+            PosX    = pos.X,
+            PosY    = pos.Y,
+            PosZ    = pos.Z,
+            NpcType = 0,
+            MaxHp   = npc.MaxHp,
+        });
+        inGameData.Broadcast(_socket, buf);
+        Console.WriteLine($"[NPC] 스폰 NpcId={npcId}, fieldId={fieldId}, alive={alive + 1}");
+    }
+
+    private void TickAndBroadcastNpcs(InGameData inGameData, float dt)
+    {
+        uint tick = (uint)(Environment.TickCount64 / 100);
+
+        foreach (var kv in inGameData.NpcMap)
+        {
+            var npc = kv.Value;
+            if (!npc.IsAlive) continue;
+
+            var prevPos = npc.Position;
+            UpdateNpcChaseState(npc, inGameData);
+            MoveNpc(npc, dt);
+
+            // 위치 변화 없으면 패킷 전송 스킵
+            if ((npc.Position - prevPos).LengthSquared() < 0.0001f) continue;
+
+            var buf = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcState, new NpcStatePacket
+            {
+                Tick      = tick,
+                NpcId     = npc.NpcId,
+                PosX      = npc.Position.X,
+                PosY      = npc.Position.Y,
+                PosZ      = npc.Position.Z,
+                RotY      = npc.RotY,
+                VelX      = npc.MoveDir.X * NpcMoveSpeed,
+                VelZ      = npc.MoveDir.Z * NpcMoveSpeed,
+            });
+            inGameData.Broadcast(_socket, buf);
+        }
+    }
+
+    private void UpdateNpcChaseState(NpcData npc, InGameData inGameData)
+    {
+        if (npc.IsChasing)
+        {
+            bool targetGone = !inGameData.PlayerUnitDataMap.TryGetValue(npc.ChaseTargetId, out var target)
+                              || DistanceSq(npc.Position, target.Position) > NpcChaseExitRange * NpcChaseExitRange;
+
+            if (targetGone)
+            {
+                npc.IsChasing     = false;
+                npc.ChaseTargetId = 0;
+                npc.PickNewDirection();
+
+                var evt = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcChaseEvent,
+                    new NpcChaseEventPacket { NpcId = npc.NpcId, TargetPlayerId = 0, IsChasing = false });
+                inGameData.Broadcast(_socket, evt);
+            }
+            else
+            {
+                var delta = target.Position - npc.Position;
+                if (delta.LengthSquared() > 0.01f)
+                {
+                    var dir  = System.Numerics.Vector3.Normalize(delta);
+                    npc.MoveDir = new System.Numerics.Vector3(dir.X, 0, dir.Z);
+                    npc.RotY    = (float)(Math.Atan2(dir.X, dir.Z) * (180.0 / Math.PI));
+                }
+            }
+        }
+        else
+        {
+            int   nearestId     = 0;
+            float nearestDistSq = NpcChaseRange * NpcChaseRange;
+
+            foreach (var kv in inGameData.PlayerUnitDataMap)
+            {
+                float dSq = DistanceSq(npc.Position, kv.Value.Position);
+                if (dSq < nearestDistSq)
+                {
+                    nearestDistSq = dSq;
+                    nearestId     = kv.Key;
+                }
+            }
+
+            if (nearestId != 0)
+            {
+                npc.IsChasing     = true;
+                npc.ChaseTargetId = nearestId;
+
+                var evt = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcChaseEvent,
+                    new NpcChaseEventPacket { NpcId = npc.NpcId, TargetPlayerId = nearestId, IsChasing = true });
+                inGameData.Broadcast(_socket, evt);
+            }
+        }
+    }
+
+    private void MoveNpc(NpcData npc, float dt)
+    {
+        const float bound = 80f;
+
+        if (!npc.IsChasing)
+        {
+            npc.DirTimer -= dt;
+            if (npc.DirTimer <= 0f)
+            {
+                npc.DirTimer = float.MaxValue;
+                npc.MoveDir  = System.Numerics.Vector3.Zero;
+                _ = Task.Run(async () => { await Task.Delay(3000); npc.PickNewDirection(); });
+                return;
+            }
+        }
+
+        var newPos = npc.Position + npc.MoveDir * NpcMoveSpeed * dt;
+        if (Math.Abs(newPos.X) > bound || Math.Abs(newPos.Z) > bound)
+        {
+            npc.PickNewDirection();
+            npc.Position = new System.Numerics.Vector3(
+                Math.Clamp(newPos.X, -bound, bound), newPos.Y,
+                Math.Clamp(newPos.Z, -bound, bound));
+            return;
+        }
+        npc.Position = newPos;
+    }
+
+    private static float DistanceSq(System.Numerics.Vector3 a, System.Numerics.Vector3 b)
+    {
+        float dx = a.X - b.X, dz = a.Z - b.Z;
+        return dx * dx + dz * dz;
+    }
+
+    #endregion
 
     private void SendProto<T>(uint packetType, T message, IPEndPoint ep)
     {

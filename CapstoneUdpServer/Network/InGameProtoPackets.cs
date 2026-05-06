@@ -4,7 +4,6 @@ using ProtoBuf;
 
 namespace CapstoneUdpServer.Network
 {
-    public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead, Melee, Reload }
     public enum HitTargetType { Player, MovingUnit, Building, Environment }
     
     [ProtoContract]
@@ -21,8 +20,7 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(7)] public bool IsJumping;
         [ProtoMember(8)] public bool IsRunning;
         [ProtoMember(9)] public bool IsCrouching;
-        
-        [ProtoMember(10)] public PlayerAnimState AnimState;
+
         [ProtoMember(11)] public WeaponType WeaponIndex;
         [ProtoMember(12)] public float DeltaTime;
 
@@ -43,7 +41,6 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(7)] public float VelY;
         [ProtoMember(8)] public float VelZ;
         [ProtoMember(9)] public float RotationY;
-        [ProtoMember(10)] public PlayerAnimState AnimState;
     }
 
     [ProtoContract]
@@ -58,7 +55,6 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(7)] public float VelY;
         [ProtoMember(8)] public float VelZ;
         [ProtoMember(9)] public float RotationY;
-        [ProtoMember(10)] public PlayerAnimState AnimState;
         [ProtoMember(11)] public WeaponType WeaponIndex;
         [ProtoMember(12)] public float CameraPitch;
         [ProtoMember(13)] public bool IsCrouching;
@@ -84,16 +80,23 @@ namespace CapstoneUdpServer.Network
     [ProtoContract]
     public class NpcStatePacket
     {
-        [ProtoMember(1)] public uint Tick;
-        [ProtoMember(2)] public int NpcId;
-        [ProtoMember(3)] public float PosX;
-        [ProtoMember(4)] public float PosY;
-        [ProtoMember(5)] public float PosZ;
-        [ProtoMember(6)] public float RotY;
-        [ProtoMember(7)] public float VelX;
-        [ProtoMember(8)] public float VelZ;
-        [ProtoMember(9)] public float CurrentHp;
-        [ProtoMember(10)] public PlayerAnimState AnimState;
+        [ProtoMember(1)]  public uint            Tick;
+        [ProtoMember(2)]  public int             NpcId;
+        [ProtoMember(3)]  public float           PosX;
+        [ProtoMember(4)]  public float           PosY;
+        [ProtoMember(5)]  public float           PosZ;
+        [ProtoMember(6)]  public float           RotY;
+        [ProtoMember(7)]  public float           VelX;
+        [ProtoMember(8)]  public float           VelZ;
+        [ProtoMember(9)]  public float           CurrentHp;
+    }
+
+    [ProtoContract]
+    public class NpcChaseEventPacket
+    {
+        [ProtoMember(1)] public int  NpcId;
+        [ProtoMember(2)] public int  TargetPlayerId; // 0이면 추적 중단
+        [ProtoMember(3)] public bool IsChasing;
     }
 
     [ProtoContract]
@@ -120,11 +123,12 @@ namespace CapstoneUdpServer.Network
     [ProtoContract]
     public class SpawnNpcPacket
     {
-        [ProtoMember(1)] public int NpcId;
+        [ProtoMember(1)] public int   NpcId;
         [ProtoMember(2)] public float PosX;
         [ProtoMember(3)] public float PosY;
         [ProtoMember(4)] public float PosZ;
-        [ProtoMember(5)] public int NpcType;
+        [ProtoMember(5)] public int   NpcType;
+        [ProtoMember(6)] public float MaxHp;
     }
 
     [ProtoContract]
@@ -319,11 +323,37 @@ namespace CapstoneUdpServer.Network
     }
 
     [ProtoContract]
-    public class GoldUpdatePacket
+    public class DeathUpdatePacket
     {
         [ProtoMember(1)] public int PlayerId;
-        [ProtoMember(2)] public int GoldAmount;
-        [ProtoMember(3)] public int TotalGold;
+        [ProtoMember(2)] public int DeathCount;
+    }
+
+    [ProtoContract]
+    public class RespawnRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class RespawnResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+    }
+
+    [ProtoContract]
+    public class RewardUpdatePacket
+    {
+        [ProtoMember(1)] public int   PlayerId;
+        [ProtoMember(2)] public int   GoldAmount;
+        [ProtoMember(3)] public int   TotalGold;
+        [ProtoMember(4)] public float ExpAmount;
+        [ProtoMember(5)] public float TotalExp;
+        [ProtoMember(6)] public int   KillCount;
+        [ProtoMember(7)] public int   CSCount;
+        [ProtoMember(8)] public int   Level;
+        [ProtoMember(9)] public float RequiredExp;
     }
 
     [ProtoContract]

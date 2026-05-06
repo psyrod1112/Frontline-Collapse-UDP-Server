@@ -22,7 +22,7 @@ public class LobbyServer : IDisposable
     private readonly ConcurrentDictionary<int, InGameData>  _inGameDataList;
     private readonly ConcurrentDictionary<int, RoomData>    _roomLists = new();
     private readonly DbManager                              _dbManager;
-    
+    private          InGameServer?                          _inGameServer;
 
     private int _nextRoomId;
     private int _currentPlayerCounts;
@@ -38,15 +38,16 @@ public class LobbyServer : IDisposable
         _inGameDataList = inGameDataList;
         _dbManager      = dbManager;
     }
+
+    public void SetInGameServer(InGameServer inGameServer) => _inGameServer = inGameServer;
     
     public int[][] PlayerSpawnPos()
     {
         int[][] positions = new int[4][];
-        positions[0] = new[] {  10, 15,  10, 225 };  // 우측 앞  → 225도 방향 바라봄
-        positions[1] = new[] { -20, 15, -20,  45 };  // 좌측 뒤  →  45도 방향 바라봄
-        positions[2] = new[] { -200, 15,  150, 135 };  // 좌측 앞  → 135도 방향 바라봄
-        positions[3] = new[] {  150, 15, -200, 315 };  // 우측 뒤  → 315도 방향 바라봄
-        
+        positions[0] = new[] {  10, 2,  10, 225 };
+        positions[1] = new[] { -20, 2, -20,  45 };
+        positions[2] = new[] { -200, 2,  150, 135 };
+        positions[3] = new[] {  150, 2, -200, 315 };
         return positions;
     }
 
@@ -386,7 +387,8 @@ public class LobbyServer : IDisposable
             
         }
         
-          _inGameDataList[roomData.RoomId] = newInGameData;
+        _inGameDataList[roomData.RoomId] = newInGameData;
+        _inGameServer?.StartNpcLoop(roomData.RoomId, newInGameData);
 
         BroadcastDestroyRoom(new RoomPacket
         {

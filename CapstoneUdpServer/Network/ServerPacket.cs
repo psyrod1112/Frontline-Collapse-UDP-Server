@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 
 namespace CapstoneUdpServer.Data;
@@ -54,8 +55,9 @@ public enum InGamePacketType
     RemotePlayerState,
     
     NpcState,
+    NpcChaseEvent,
     MissileState,
-    
+
     SpawnNpcRequest,
     SpawnNpc,
     SpawnMissileRequest,
@@ -70,7 +72,8 @@ public enum InGamePacketType
     BuildingDestroy,
     DamageEvent,
     DeathEvent,
-        GoldUpdate,
+    DeathUpdate,
+        RewardUpdate,
         MissileExplode,
         HotkeySlotSave,
         MissileLoadRequest,
@@ -78,10 +81,11 @@ public enum InGamePacketType
         MissileLaunch,
         MissileHitRequest,
         DamageResult,
+        RespawnRequest,
+        RespawnResponse,
     }
 
 public enum HitTargetType  { Player, MovingUnit, Building, Environment }
-public enum PlayerAnimState { Idle, Walk, Run, Jump, Fire, Dead, Melee, Reload }
 
 #region 로비 패킷
 
@@ -168,9 +172,8 @@ public class UIPacket : InGamePacket
 
 public class PlayerUnitPacket : InGamePacket
 {
-    public Vector3         Velocity      { get; set; }
-    public PlayerAnimState AnimState     { get; set; }
-    public WeaponType      WeaponIndex   { get; set; }
+    public Vector3    Velocity      { get; set; }
+    public WeaponType WeaponIndex   { get; set; }
     public int             BuildingIndex { get; set; }
 }
 

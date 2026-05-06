@@ -1,15 +1,19 @@
 ﻿
+using System;
+using System.IO;
 using ProtoBuf;
 
 namespace CapstoneUdpServer.Network
 {
     public static class ProtobufSerializer
     {
+        [ThreadStatic] private static MemoryStream _ms;
+
         public static byte[] Serialize<T>(uint packetType, T message)
         {
-            using var ms = new MemoryStream();
-            byte[] packetBytes = BitConverter.GetBytes(packetType);
-            ms.Write(packetBytes, 0, 4);
+            var ms = _ms ??= new MemoryStream(512);
+            ms.SetLength(0);
+            ms.Write(BitConverter.GetBytes(packetType), 0, 4);
             Serializer.Serialize(ms, message);
             return ms.ToArray();
         }

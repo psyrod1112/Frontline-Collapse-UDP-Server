@@ -57,6 +57,7 @@ public class UdpServer : IDisposable
 
             LobbyServer  = new LobbyServer(_socket, PlayerStore, InGameDataList, dbManager);
             InGameServer = new InGameServer(_socket, InGameDataList, PlayerStore);
+            LobbyServer.SetInGameServer(InGameServer);
 
             Console.WriteLine("[UdpServer] Initialize: 초기 설정 완료");
             return true;
@@ -99,14 +100,8 @@ public class UdpServer : IDisposable
 
     private void WorkerLoop(int threadId)
     {
-        int count = 0;
         while (_isRunning)
-        {
             _jobQueue.Dequeue().Execute();
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"[UdpServer] {threadId}번 스레드 패킷 처리 (총 {++count})");
-            Console.ResetColor();
-        }
     }
 
     #endregion
@@ -130,7 +125,6 @@ public class UdpServer : IDisposable
                         byte[] packet = new byte[len];
                         Array.Copy(buffer, packet, len);
                         _jobQueue.Enqueue(new PacketJob(LobbyServer, InGameServer, packet, len, (IPEndPoint)clientEp));
-                        Console.WriteLine("[UdpServer] 패킷 수신 → 큐에 추가");
                     }
                 }
                 catch (SocketException se) when (se.SocketErrorCode == SocketError.ConnectionReset)
@@ -162,6 +156,7 @@ public class UdpServer : IDisposable
     {
         if (_disposed) return;
         _isRunning = false;
+        InGameServer?.Stop();
         LobbyServer?.Dispose();
         _socket?.Dispose();
         PlayerStore.Clear();
