@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -105,10 +106,28 @@ public class InGameServer
                     var respawnPacket = ProtobufSerializer.Deserialize<RespawnRequestPacket>(buffer);
                     HandleRespawnRequest(respawnPacket, clientEp);
                     break;
+                case (uint)InGamePacketType.ScoreBoardRequest:
+                    var scoreBoardPacket = ProtobufSerializer.Deserialize<ScoreBoardRequestPacket>(buffer);
+                    HandleScoreBoardRequest(scoreBoardPacket, clientEp);
+                    break;
+                case (uint)InGamePacketType.BuyRequest:
+                    var buyRequestPacket = ProtobufSerializer.Deserialize<BuyRequestPacket>(buffer);
+                    HandleBuyRequest(buyRequestPacket, clientEp);
+                    break;
+                case (uint)InGamePacketType.InventoryRequest:
+                    var inventoryRequestPacket = ProtobufSerializer.Deserialize<InventoryRequestPacket>(buffer);
+                    HandleInventoryRequest(inventoryRequestPacket, clientEp);
+                    break;
+                case (uint)InGamePacketType.InventoryShortcutRequest:
+                    var shortcutRequestPacket = ProtobufSerializer.Deserialize<InventoryShortcutRequestPacket>(buffer);
+                    HandleInventoryShortcutRequest(shortcutRequestPacket, clientEp);
+                    break;
             }
         }
         
     }
+
+    
 
 
     private void HandleUIUpdateRequest(UIUpdateRequestPacket packet, IPEndPoint clientEp)
@@ -128,10 +147,10 @@ public class InGameServer
             MaxHp               = unit.MaxHp,
             Exp                 = unit.Exp,
             RequiredExp         = unit.RequiredExp,
-            WeaponPrefabIndex_1 = (int)unit.WeaponPrefabIndex_1,
-            WeaponPrefabIndex_2 = (int)unit.WeaponPrefabIndex_2,
-            WeaponPrefabIndex_3 = (int)unit.WeaponPrefabIndex_3,
-            WeaponPrefabIndex_4 = (int)unit.WeaponPrefabIndex_4,
+            Shortcut1 = (int)unit.Shortcut1,
+            Shortcut2 = (int)unit.Shortcut2,
+            Shortcut3 = (int)unit.Shortcut3,
+            Shortcut4 = (int)unit.Shortcut4,
             KillCount           = unit.KillCount,
             DeathCount          = unit.DeathCount,
             CSCount             = unit.CSCount,
@@ -358,10 +377,10 @@ public class InGameServer
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
         if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
 
-        unit.WeaponPrefabIndex_1 = (WeaponType)packet.Slot1;
-        unit.WeaponPrefabIndex_2 = (WeaponType)packet.Slot2;
-        unit.WeaponPrefabIndex_3 = (WeaponType)packet.Slot3;
-        unit.WeaponPrefabIndex_4 = (WeaponType)packet.Slot4;
+        unit.Shortcut1 = (ItemName)packet.Slot1;
+        unit.Shortcut2 = (ItemName)packet.Slot2;
+        unit.Shortcut3 = (ItemName)packet.Slot3;
+        unit.Shortcut4 = (ItemName)packet.Slot4;
 
         Console.WriteLine($"[InGameServer] 핫키 저장: PlayerId={packet.PlayerId}, Slots={packet.Slot1}/{packet.Slot2}/{packet.Slot3}/{packet.Slot4}");
     }
@@ -490,7 +509,7 @@ public class InGameServer
             currentHp      = unit.CurrentHp;
             maxHp          = unit.MaxHp;
 
-            if (unit.CurrentHp <= 0f)
+            if (unit.IsDead)
             {
                 unit.DeathCount++;
 
@@ -512,7 +531,6 @@ public class InGameServer
                         DeathCount = unit.DeathCount,
                     },
                     (IPEndPoint)unit.IpEndPoint);
-                unit.isDead = true;
 
                 if (inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var playerKiller))
                 {
@@ -563,14 +581,57 @@ public class InGameServer
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
         if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
 
-        unit.isDead    = false;
-        unit.CurrentHp = unit.MaxHp;
+        unit.Revive(unit.MaxHp);
+        unit.LevelDown();
 
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.RespawnResponse,
-            new RespawnResponsePacket { PlayerId = packet.PlayerId });
-        inGameData.Broadcast(_socket, buf, excludePlayerId: packet.PlayerId);
+            new RespawnResponsePacket
+            {
+                PlayerId = unit.PlayerId,
+                FieldId = unit.FieldId,
+                //TODO: 스폰 위치 지정하기
+                MaxHp = unit.MaxHp,
+                Level = unit.Level,
+                ExpAmount = unit.Exp,
+                RequiredExp = unit.RequiredExp
+            });
+        inGameData.Broadcast(_socket, buf);
 
         Console.WriteLine($"[Respawn] PlayerId={packet.PlayerId} 리스폰 브로드캐스트 완료 (HP={unit.MaxHp})");
+    }
+
+    private void HandleScoreBoardRequest(ScoreBoardRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+
+        var sortedPlayers = inGameData.PlayerUnitDataMap.Values
+            .OrderByDescending(p => p.TotalGold)
+            .Select(p => p.PlayerId)
+            .ToList();
+
+        foreach (var player in inGameData.PlayerUnitDataMap.Values)
+        {
+            if (player == null) continue;
+            int rank = sortedPlayers.IndexOf(player.PlayerId) + 1;
+            SendProto((uint)InGamePacketType.ScoreBoardResponse, new ScoreBoardResponsePacket
+            {
+                PlayerId               = player.PlayerId,
+                FieldId                = player.FieldId,
+                PlayerName             = player.PlayerName ?? "",
+                TotalGold              = player.TotalGold,
+                Level                  = player.Level,
+                MaxHp                  = player.MaxHp,
+                CurrentHp              = player.CurrentHp,
+                FinalBuildingMaxHp     = player.FinalBuildingMaxHp,
+                FinalBuildingCurrentHp = player.FinalBuildingCurrentHp,
+                KillCount              = player.KillCount,
+                DeathCount             = player.DeathCount,
+                CSCount                = player.CSCount,
+                Rank                   = rank,
+                isDead                 = player.IsDead,
+                isMine                 = player.PlayerId == packet.PlayerId,
+            }, clientEp);
+        }
     }
 
     private void HandlePlayerInput(PlayerInputPacket packet, IPEndPoint clientEp)
@@ -581,7 +642,7 @@ public class InGameServer
             return;
         }
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
-        if (inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unitCheck) && unitCheck.isDead) return;
+        if (inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unitCheck) && unitCheck.IsDead) return;
 
         SendProto((uint)InGamePacketType.MoveConfirm, new PlayerMoveConfirmPacket
         {
@@ -612,6 +673,110 @@ public class InGameServer
             unit.SetPosition(
                 new System.Numerics.Vector3(packet.PosX, packet.PosY, packet.PosZ),
                 new System.Numerics.Vector3(0, packet.RotationY, 0));
+    }
+    private ItemName itemName;
+    
+    private void HandleBuyRequest(BuyRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+        string msg = "";
+
+        if (unit.Gold < packet.ItemPrice)
+        {
+            msg = "골드가 부족합니다!";
+        }
+        else
+        {
+            ShopList shopItem = (ShopList)packet.ItemType;
+            
+            switch (shopItem)
+            {
+                case  ShopList.Grenade:
+                    itemName = ItemName.NormalGrenade; break;
+                case  ShopList.Tank:
+                    itemName = ItemName.Tank; break;
+                case  ShopList.Missile:
+                    itemName = ItemName.NormalMissile; break;
+                case ShopList.Artillery:
+                    itemName = ItemName.Artillery; break;
+            }
+            
+            unit.Gold -= packet.ItemPrice;
+            unit.AddInventory(itemName, shopItem);
+            switch (shopItem)
+            {
+                case ShopList.Grenade:
+                    msg = "수류탄을 구매하였습니다."; break;
+                case ShopList.Tank:
+                    msg = "장갑차를 구매하였습니다."; break;
+                case ShopList.Artillery:
+                    msg = "박격포를 구매하였습니다."; break;
+                case ShopList.Missile:
+                    msg = "미사일을 구매하였습니다."; break;
+            }
+        }
+        
+        SendProto((uint)InGamePacketType.BuyResponse, new BuyResponsePacket
+        {
+            PlayerId = unit.PlayerId,
+            FieldId =  unit.FieldId,
+            Msg = msg,
+            RemainGold = unit.Gold,
+        }, clientEp);
+        
+    }
+    
+    private void HandleInventoryRequest(InventoryRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+
+        foreach (var item in unit.Inventory.Values)
+        {
+            SendProto((uint)InGamePacketType.InventoryResponse, new InventoryResponsePacket
+            {
+                PlayerId = unit.PlayerId,
+                FieldId = unit.FieldId,
+                ItemId = item.ItemId,
+                ItemType = (int)item.Type,
+                Amount = item.Amount,
+                
+                Shortcut1 = (int)unit.Shortcut1,
+                Shortcut2 = (int)unit.Shortcut2,
+                Shortcut3 = (int)unit.Shortcut3,
+                Shortcut4 = (int)unit.Shortcut4,
+                
+            }, clientEp);
+            
+        }
+
+    }
+
+    private void HandleInventoryShortcutRequest(InventoryShortcutRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+
+        var itemName = (ItemName)packet.ItemName;
+        switch (packet.SlotIndex)
+        {
+            case 1: unit.Shortcut1 = itemName; break;
+            case 2: unit.Shortcut2 = itemName; break;
+            case 3: unit.Shortcut3 = itemName; break;
+            case 4: unit.Shortcut4 = itemName; break;
+            default: return;
+        }
+
+        SendProto((uint)InGamePacketType.InventoryShortcutResponse, new InventoryShortcutResponsePacket
+        {
+            PlayerId           = unit.PlayerId,
+            FieldId            = unit.FieldId,
+            InventoryShortcut1 = (int)unit.Shortcut1,
+            InventoryShortcut2 = (int)unit.Shortcut2,
+            InventoryShortcut3 = (int)unit.Shortcut3,
+            InventoryShortcut4 = (int)unit.Shortcut4,
+        }, clientEp);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -669,9 +834,9 @@ public class InGameServer
         float angle  = (float)(_rng.NextDouble() * Math.PI * 2);
         float radius = 15f + (float)(_rng.NextDouble() * 30f);
         var   pos    = new System.Numerics.Vector3(
-            (float)Math.Sin(angle) * radius,
+            400f + (float)Math.Sin(angle) * radius,
             2f,
-            (float)Math.Cos(angle) * radius);
+            400f + (float)Math.Cos(angle) * radius);
 
         var npc = new NpcData { NpcId = npcId, NpcType = 0, Position = pos };
         npc.PickNewDirection();

@@ -44,10 +44,10 @@ public class LobbyServer : IDisposable
     public int[][] PlayerSpawnPos()
     {
         int[][] positions = new int[4][];
-        positions[0] = new[] {  10, 2,  10, 225 };
-        positions[1] = new[] { -20, 2, -20,  45 };
-        positions[2] = new[] { -200, 2,  150, 135 };
-        positions[3] = new[] {  150, 2, -200, 315 };
+        positions[0] = new[] {  410, 2,  410, 225 };
+        positions[1] = new[] {  380, 2,  380,  45 };
+        positions[2] = new[] {  200, 2,  550, 135 };
+        positions[3] = new[] {  550, 2,  200, 315 };
         return positions;
     }
 
@@ -359,7 +359,7 @@ public class LobbyServer : IDisposable
                 RotZ     = unit.Rotation.Z,
                 CurrentHp   = unit.CurrentHp,
                 MaxHp       = unit.MaxHp,
-                WeaponIndex = (int)unit.CurrentWeaponPrefabIndex,
+                WeaponIndex = (int)unit.CurrentGrippingItem,
             }, roomData);
             playerIdx++;
 
@@ -376,10 +376,10 @@ public class LobbyServer : IDisposable
                 MaxHp              = unit.MaxHp,
                 Exp                = unit.Exp,
                 RequiredExp        = unit.RequiredExp,
-                WeaponPrefabIndex_1 = (int)unit.WeaponPrefabIndex_1,
-                WeaponPrefabIndex_2 = (int)unit.WeaponPrefabIndex_2,
-                WeaponPrefabIndex_3 = (int)unit.WeaponPrefabIndex_3,
-                WeaponPrefabIndex_4 = (int)unit.WeaponPrefabIndex_4,
+                Shortcut1 = (int)unit.Shortcut1,
+                Shortcut2 = (int)unit.Shortcut2,
+                Shortcut3 = (int)unit.Shortcut3,
+                Shortcut4 = (int)unit.Shortcut4,
                 KillCount          = unit.KillCount,
                 DeathCount         = unit.DeathCount,
                 CSCount            = unit.CSCount,

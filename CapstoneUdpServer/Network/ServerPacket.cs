@@ -73,17 +73,28 @@ public enum InGamePacketType
     DamageEvent,
     DeathEvent,
     DeathUpdate,
-        RewardUpdate,
-        MissileExplode,
-        HotkeySlotSave,
-        MissileLoadRequest,
-        MissileLoadResponse,
-        MissileLaunch,
-        MissileHitRequest,
-        DamageResult,
-        RespawnRequest,
-        RespawnResponse,
-    }
+    RewardUpdate,
+    MissileExplode,
+    HotkeySlotSave,
+    MissileLoadRequest,
+    MissileLoadResponse,
+    MissileLaunch,
+    MissileHitRequest,
+    DamageResult,
+    RespawnRequest,
+    RespawnResponse,
+    
+    ScoreBoardRequest,
+    ScoreBoardResponse,
+    
+    BuyRequest,
+    BuyResponse,
+    InventoryRequest,
+    InventoryResponse,
+
+    InventoryShortcutRequest,
+    InventoryShortcutResponse,
+}
 
 public enum HitTargetType  { Player, MovingUnit, Building, Environment }
 
@@ -160,10 +171,10 @@ public class UIPacket : InGamePacket
     public int Level { get; set; }
     public float Exp { get; set; }
     public float RequiredExp { get; set; }
-    public WeaponType WeaponPrefabIndex_1 { get; set; }
-    public WeaponType WeaponPrefabIndex_2 { get; set; }
-    public WeaponType WeaponPrefabIndex_3 { get; set; }
-    public WeaponType WeaponPrefabIndex_4 { get; set; }
+    public ItemName Shortcut1 { get; set; }
+    public ItemName Shortcut2 { get; set; }
+    public ItemName Shortcut3 { get; set; }
+    public ItemName Shortcut4 { get; set; }
     public int KillCount { get; set; }
     public int DeathCount { get; set; }
     public int CSCount { get; set; }

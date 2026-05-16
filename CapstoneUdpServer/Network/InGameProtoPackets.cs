@@ -339,7 +339,16 @@ namespace CapstoneUdpServer.Network
     [ProtoContract]
     public class RespawnResponsePacket
     {
-        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(1)] public int   PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public float SpawnPosX;
+        [ProtoMember(4)] public float SpawnPosY;
+        [ProtoMember(5)] public float SpawnPosZ;
+        [ProtoMember(6)] public float SpawnRotY;
+        [ProtoMember(7)] public float MaxHp;
+        [ProtoMember(8)] public int Level;
+        [ProtoMember(9)] public float ExpAmount;
+        [ProtoMember(10)] public float RequiredExp;
     }
 
     [ProtoContract]
@@ -369,12 +378,100 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(8)] public float MaxHp;
         [ProtoMember(9)] public float Exp;
         [ProtoMember(10)] public float RequiredExp;
-        [ProtoMember(11)] public int WeaponPrefabIndex_1;
-        [ProtoMember(12)] public int WeaponPrefabIndex_2;
-        [ProtoMember(13)] public int WeaponPrefabIndex_3;
-        [ProtoMember(14)] public int WeaponPrefabIndex_4;
+        [ProtoMember(11)] public int Shortcut1;
+        [ProtoMember(12)] public int Shortcut2;
+        [ProtoMember(13)] public int Shortcut3;
+        [ProtoMember(14)] public int Shortcut4;
         [ProtoMember(15)] public int KillCount;
         [ProtoMember(16)] public int DeathCount;
         [ProtoMember(17)] public int CSCount;
+    }
+
+    [ProtoContract]
+    public class ScoreBoardRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class ScoreBoardResponsePacket
+    {
+        [ProtoMember(1)]  public int    PlayerId;
+        [ProtoMember(2)]  public int    FieldId;
+        [ProtoMember(3)]  public string PlayerName;
+        [ProtoMember(4)]  public int    TotalGold;
+        [ProtoMember(5)]  public int    Level;
+        [ProtoMember(6)]  public float  MaxHp;
+        [ProtoMember(7)]  public float  CurrentHp;
+        [ProtoMember(8)]  public float  FinalBuildingMaxHp;
+        [ProtoMember(9)]  public float  FinalBuildingCurrentHp;
+        [ProtoMember(10)] public int    KillCount;
+        [ProtoMember(11)] public int    DeathCount;
+        [ProtoMember(12)] public int    CSCount;
+        [ProtoMember(13)] public int    Rank;
+        [ProtoMember(14)] public bool   isDead;
+        [ProtoMember(15)] public bool   isMine;
+    }
+
+    [ProtoContract]
+    public class BuyRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public uint ItemType;
+        [ProtoMember(4)] public int ItemPrice;
+    }
+    
+    [ProtoContract]
+    public class BuyResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public string Msg;
+        [ProtoMember(4)] public int RemainGold;
+    }
+    
+    [ProtoContract]
+    public class InventoryRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class InventoryResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int ItemType;
+        [ProtoMember(4)] public int ItemId;
+        [ProtoMember(5)] public int Amount;
+
+        [ProtoMember(6)] public int Shortcut1;
+        [ProtoMember(7)] public int Shortcut2;
+        [ProtoMember(8)] public int Shortcut3;
+        [ProtoMember(9)] public int Shortcut4;
+
+    }
+
+    [ProtoContract]
+    public class InventoryShortcutRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int SlotIndex;
+        [ProtoMember(4)] public int ItemName;
+    }
+
+    [ProtoContract]
+    public class InventoryShortcutResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int InventoryShortcut1;
+        [ProtoMember(4)] public int InventoryShortcut2;
+        [ProtoMember(5)] public int InventoryShortcut3;
+        [ProtoMember(6)] public int InventoryShortcut4;
     }
 }

@@ -2,6 +2,8 @@ using System.Collections.Generic;
 
 namespace CapstoneUdpServer.Data;
 
+
+
 public enum WeaponType
 {
     None,
