@@ -1,0 +1,41 @@
+services:
+  gameserver:
+    build: ./CapstoneUdpServer
+    ports:
+      - "8888:8888/udp"
+      - "8888:8888/tcp"
+    environment:
+      - SERVER_IP=0.0.0.0
+      - DB_CONNECTION_STRING=Host=postgres;Port=5432;Database=frontline_collapse;Username=postgres;Password=tkddbs321!
+      - REDIS_CONNECTION=redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=frontline_collapse
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=tkddbs321!
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

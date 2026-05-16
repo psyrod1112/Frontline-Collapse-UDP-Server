@@ -126,6 +126,7 @@ public class DbManager : IDisposable
 
 
     private string connectionString =
+        Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") ??
         "Host=127.0.0.1;Port=5432;Database=frontline_collapse;Username=postgres;Password=tkddbs321!";
 
     #region DB 연결 메서드
@@ -151,7 +152,8 @@ public class DbManager : IDisposable
     {
         try
         {
-            _redis = await ConnectionMultiplexer.ConnectAsync("localhost:6379");
+            _redis = await ConnectionMultiplexer.ConnectAsync(
+                Environment.GetEnvironmentVariable("REDIS_CONNECTION") ?? "localhost:6379");
             if (_redis == null || !_redis.IsConnected)
             {
                 Console.WriteLine("[DbManager] ConnectRedisAsync: Redis 연결 실패!");

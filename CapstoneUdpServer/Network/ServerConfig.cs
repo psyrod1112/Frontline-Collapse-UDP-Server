@@ -10,7 +10,7 @@ public class ServerConfig
 
     public ServerConfig()
     {
-        ServerIp = "127.0.0.1";
+        ServerIp = Environment.GetEnvironmentVariable("SERVER_IP") ?? "0.0.0.0";
         Port = 8888;
         MaxPlayerCounts = 100;
         BufferSize = 1024;
