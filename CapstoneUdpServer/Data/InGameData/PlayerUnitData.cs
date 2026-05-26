@@ -9,7 +9,9 @@ public class PlayerUnitData
 {
     
     private readonly PlayerData _playerData;
-    public bool IsDead {get; private set;}
+    public bool IsDead          { get; private set; }
+    /// <summary>HandleDeathRequest 에서 사망 처리 완료 시 true — 중복 처리 방지</summary>
+    public bool DeathProcessed  { get; set; }
 
     // PlayerData 위임 프로퍼티
     public int      PlayerId   => _playerData.PlayerId;
@@ -82,8 +84,9 @@ public class PlayerUnitData
     
     public void Revive(float hp)
     {
-        _currentHp = hp;
-        IsDead = false;
+        _currentHp     = hp;
+        IsDead         = false;
+        DeathProcessed = false;
     }
     
     public float    MaxHp            { get; set; }
@@ -91,7 +94,7 @@ public class PlayerUnitData
     public ItemName Shortcut2        { get; set; }
     public ItemName Shortcut3        { get; set; }
     public ItemName Shortcut4        { get; set; }
-    public int CurrentGrippingItem { get; set; }
+    public ItemName CurrentGrippingItem { get; set; }
     public Vector3 Position          { get; set; }
     public Vector3 Rotation          { get; set; }
     public int KillCount {get; set; }
@@ -99,8 +102,9 @@ public class PlayerUnitData
     public int CSCount {get; set; }
     public int   GuidedMissileCount    { get; set; }
     public int   NukeMissileCount      { get; set; }
-    public float FinalBuildingMaxHp     { get; set; }
+    public float FinalBuildingMaxHp     { get; set; } 
 
+    public int HotkeyIndex { get; set; } // 1, 2, 3, 4임
 
     private float _finalBuildingCurrentHp;
 
@@ -114,8 +118,7 @@ public class PlayerUnitData
                 _finalBuildingCurrentHp = 0;
         }
     }
-
-    public ConcurrentDictionary<int, InGameBuildingRecord> Buildings { get; } = new();
+    
     public ConcurrentDictionary<ItemName, ItemData> Inventory = new();
 
     public PlayerUnitData(PlayerData playerData, int fieldId)
@@ -123,22 +126,22 @@ public class PlayerUnitData
         _playerData = playerData;
         _playerData.SetFieldId(fieldId);
 
-        Gold = 0;
+        Gold = 100000;
         Level = 1;
         Exp = 0;
-        Shortcut1           = ItemName.Rifle;
+        Shortcut1           = ItemName.Rifle_Normal;
         Shortcut2           = ItemName.None;
         Shortcut3           = ItemName.None;
         Shortcut4           = ItemName.None;
-        CurrentGrippingItem = 1;
+        CurrentGrippingItem = Shortcut1;
 
         MaxHp     = 100f;
         CurrentHp = 100f;
 
-        Inventory[ItemName.Rifle] = new ItemData
+        Inventory[ItemName.Rifle_Normal] = new ItemData
         {
-            ItemId = (int)ItemName.Rifle,
-            Type   = ItemType.Gun,
+            ItemId = (int)ItemName.Rifle_Normal,
+            Type   = ItemType.Weapon,
             Amount = 1,
         };
 
@@ -147,8 +150,9 @@ public class PlayerUnitData
         CSCount = 0;
         GuidedMissileCount = 3;
         NukeMissileCount = 1;
-        
-        
+        HotkeyIndex = 0; // 0-based
+
+
     }
     
     private float CalcMaxExp(int level)
@@ -162,15 +166,14 @@ public class PlayerUnitData
         Rotation = rot;
     }
 
-    public void AddInventory(ItemName itemName, ShopList shopItem)
+    public void AddInventory(ItemName itemName)
     {
         Inventory.AddOrUpdate(
             itemName,
             _ => new ItemData
             {
                 ItemId = (int)itemName,
-                ShopType = shopItem,
-                Type = ShopListToItemType(shopItem),
+                Type   = InGameDatas.ItemNameToItemType(itemName),
                 Amount = 1
             },
             (_, existing) =>
@@ -180,16 +183,22 @@ public class PlayerUnitData
             });
     }
 
-
-
-    private ItemType ShopListToItemType(ShopList item) => item switch
+    // index: 0-based (0~3)
+    public ItemName SetAndReturnGrippingItem(int index)
     {
-        ShopList.Grenade => ItemType.Grenade,
-        ShopList.Tank => ItemType.Vehicle,
-        ShopList.Artillery => ItemType.Building,
-        ShopList.Missile => ItemType.Missile,
-        _ => throw new ArgumentOutOfRangeException()
-    };
+        switch (index)
+        {
+            case 0: CurrentGrippingItem = Shortcut1; break;
+            case 1: CurrentGrippingItem = Shortcut2; break;
+            case 2: CurrentGrippingItem = Shortcut3; break;
+            case 3: CurrentGrippingItem = Shortcut4; break;
+            default:
+                CurrentGrippingItem = ItemName.None;
+                break;
+        }
+        return CurrentGrippingItem;
+    }
+    
 
     public void LevelDown()
     {

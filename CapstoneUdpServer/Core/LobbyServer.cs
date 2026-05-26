@@ -44,10 +44,10 @@ public class LobbyServer : IDisposable
     public int[][] PlayerSpawnPos()
     {
         int[][] positions = new int[4][];
-        positions[0] = new[] {  410, 2,  410, 225 };
-        positions[1] = new[] {  380, 2,  380,  45 };
-        positions[2] = new[] {  200, 2,  550, 135 };
-        positions[3] = new[] {  550, 2,  200, 315 };
+        positions[0] = new[] {  -330, 10,  -330, 0 };
+        positions[1] = new[] {  330, 10,  330,  0 };
+        positions[2] = new[] {  200, 2,  550, 0 };
+        positions[3] = new[] {  550, 2,  200, 0 };
         return positions;
     }
 
@@ -359,7 +359,8 @@ public class LobbyServer : IDisposable
                 RotZ     = unit.Rotation.Z,
                 CurrentHp   = unit.CurrentHp,
                 MaxHp       = unit.MaxHp,
-                WeaponIndex = (int)unit.CurrentGrippingItem,
+                CurrentGrippingItem = (int)unit.CurrentGrippingItem,
+                HotkeyIndex = unit.HotkeyIndex,
             }, roomData);
             playerIdx++;
 

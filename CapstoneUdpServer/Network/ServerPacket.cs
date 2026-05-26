@@ -56,12 +56,8 @@ public enum InGamePacketType
     
     NpcState,
     NpcChaseEvent,
-    MissileState,
 
-    SpawnNpcRequest,
     SpawnNpc,
-    SpawnMissileRequest,
-    SpawnMissile,
 
     // 이벤트 (클라 → 서버 → 브로드캐스트)
     FireEvent,
@@ -94,9 +90,15 @@ public enum InGamePacketType
 
     InventoryShortcutRequest,
     InventoryShortcutResponse,
+    
+    ShortcutSwitchRequest,
+    ShortcutSwitchResponse,
+    BuildingBtnRequest,
+    BuildingBtnResponse,
+    AnimTrigger,
+    HitRequest,
+    DeathRequest,
 }
-
-public enum HitTargetType  { Player, MovingUnit, Building, Environment }
 
 #region 로비 패킷
 
@@ -149,112 +151,3 @@ public class GamelogPacket : LobbyPacket
 
 #endregion
 
-#region 인게임 패킷 (기반)
-
-public class InGamePacket : BasePacket
-{
-    public int     FieldId       { get; set; }
-    public int     PlayerId      { get; set; }
-    public float   CurrentHp     { get; set; }
-    public float   MaxHp         { get; set; }
-    public float   DamageAmount  { get; set; }
-    public float   DamagedAmount { get; set; }
-    public Vector3 Position      { get; set; }
-    public Vector3 Rotation      { get; set; }
-}
-
-public class UIPacket : InGamePacket
-{
-    public string PlayerName      { get; set; }
-    public PlayerRank PlayerRank { get; set; }
-    public int Gold { get; set; }
-    public int Level { get; set; }
-    public float Exp { get; set; }
-    public float RequiredExp { get; set; }
-    public ItemName Shortcut1 { get; set; }
-    public ItemName Shortcut2 { get; set; }
-    public ItemName Shortcut3 { get; set; }
-    public ItemName Shortcut4 { get; set; }
-    public int KillCount { get; set; }
-    public int DeathCount { get; set; }
-    public int CSCount { get; set; }
-}
-
-
-public class PlayerUnitPacket : InGamePacket
-{
-    public Vector3    Velocity      { get; set; }
-    public WeaponType WeaponIndex   { get; set; }
-    public int             BuildingIndex { get; set; }
-}
-
-public class NpcUnitPacket : InGamePacket
-{
-    public int NpcUnitId      { get; set; }
-    public int DropGolds      { get; set; }
-    public int DropItemIndex  { get; set; }
-}
-
-public class BuildingUnitPacket : InGamePacket
-{
-    public int BuildingUnitId { get; set; }
-    public int MissileIndex   { get; set; }
-}
-
-#endregion
-
-#region 인게임 패킷 (동작)
-
-/// <summary>Position/Rotation = 현재 위치/방향, Velocity = 이동속도벡터</summary>
-// public class MovePacket : InGamePacket
-// {
-//     public Vector3         Velocity  { get; set; }
-//     public PlayerAnimState AnimState { get; set; }
-// }
-//
-// /// <summary>총구 이펙트 브로드캐스트용. Position = 총구 위치, Rotation = 발사 방향</summary>
-// public class BulletFirePacket : InGamePacket { }
-//
-// /// <summary>Raycast 피격 결과. 서버가 데미지 계산 후 브로드캐스트</summary>
-// public class BulletHitPacket : InGamePacket
-// {
-//     public HitTargetType HitTargetType { get; set; }
-//     public int           TargetId      { get; set; }
-//     public Vector3       HitPoint      { get; set; }
-//     public float         Damage        { get; set; }
-// }
-//
-// /// <summary>Position = 배치 좌표, PrefabIndex = 건물 종류, Rotation = 방향</summary>
-// public class BuildingCreatePacket : InGamePacket
-// {
-//     public int   BuildingId { get; set; }
-//     public float MaxHp      { get; set; }
-// }
-//
-// public class BuildingDestroyPacket : InGamePacket
-// {
-//     public int BuildingId { get; set; }
-// }
-//
-// /// <summary>Position = 발사 위치, Rotation = 발사 방향, PrefabIndex = 미사일 종류</summary>
-// public class MissileFirePacket : InGamePacket
-// {
-//     public int     MissileId { get; set; }
-//     public Vector3 Force     { get; set; }
-// }
-//
-// /// <summary>폭발 범위 내 다중 피격을 하나의 패킷으로 전송</summary>
-// public class MissileExplosionPacket : InGamePacket
-// {
-//     public int           MissileId { get; set; }
-//     public List<HitInfo> HitList   { get; set; } = new();
-// }
-//
-// public class HitInfo
-// {
-//     public HitTargetType TargetType { get; set; }
-//     public int           TargetId   { get; set; }
-//     public float         Damage     { get; set; }
-// }
-
-#endregion

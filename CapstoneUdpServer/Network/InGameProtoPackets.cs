@@ -5,18 +5,19 @@ using ProtoBuf;
 namespace CapstoneUdpServer.Network
 {
     public enum HitTargetType { Player, MovingUnit, Building, Environment }
-    
+    public enum AnimTriggerType { Jump = 0, ThrowGrenade = 1, Hit = 2, Shot = 3 }
+
     [ProtoContract]
     public class PlayerInputPacket
     {
         [ProtoMember(1)] public uint Tick;
         [ProtoMember(2)] public int PlayerId;
-        
+
         [ProtoMember(3)] public float MoveX;
         [ProtoMember(4)] public float MoveZ;
         [ProtoMember(5)] public float RotationY;
         [ProtoMember(6)] public float CameraPitch;
-        
+
         [ProtoMember(7)] public bool IsJumping;
         [ProtoMember(8)] public bool IsRunning;
         [ProtoMember(9)] public bool IsCrouching;
@@ -27,6 +28,7 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(13)] public float PosX;
         [ProtoMember(14)] public float PosY;
         [ProtoMember(15)] public float PosZ;
+        [ProtoMember(16)] public bool IsZooming;
     }
 
     [ProtoContract]
@@ -58,23 +60,33 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(11)] public WeaponType WeaponIndex;
         [ProtoMember(12)] public float CameraPitch;
         [ProtoMember(13)] public bool IsCrouching;
+        [ProtoMember(14)] public float MoveX;
+        [ProtoMember(15)] public float MoveZ;
+        [ProtoMember(16)] public bool IsRunning;
+        [ProtoMember(17)] public bool IsZooming;
+    }
 
+    [ProtoContract]
+    public class AnimTriggerPacket
+    {
+        [ProtoMember(1)] public int PlayerId; // 발신자 PlayerId (서버 라우팅용)
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int Trigger;  // AnimTriggerType
+        [ProtoMember(4)] public int TargetId; // Player → PlayerId / NPC → NpcId
     }
 
     [ProtoContract]
     public class FireEventPacket
     {
-        [ProtoMember(1)] public uint Tick;
-        [ProtoMember(2)] public int PlayerId;
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
         [ProtoMember(3)] public float OriginX;
         [ProtoMember(4)] public float OriginY;
         [ProtoMember(5)] public float OriginZ; // 총구 위치
         [ProtoMember(6)] public float DirX;
         [ProtoMember(7)] public float DirY;
         [ProtoMember(8)] public float DirZ; // 발사 방향
-        [ProtoMember(9)] public WeaponType WeaponIndex;
-        [ProtoMember(10)] public int HitTargetId;
-        [ProtoMember(11)] public HitTargetType HitTargetType;
+        [ProtoMember(9)] public int ItemName;
     }
 
     [ProtoContract]
@@ -100,27 +112,6 @@ namespace CapstoneUdpServer.Network
     }
 
     [ProtoContract]
-    public class MissileStatePacket
-    {
-        [ProtoMember(1)] public uint Tick;
-        [ProtoMember(2)] public int MissileId;
-        [ProtoMember(3)] public float PosX;
-        [ProtoMember(4)] public float PosY;
-        [ProtoMember(5)] public float PosZ;
-        [ProtoMember(6)] public float VelX;
-        [ProtoMember(7)] public float VelY;
-        [ProtoMember(8)] public float VelZ;
-        [ProtoMember(9)] public bool Exploded;
-    }
-
-    [ProtoContract]
-    public class SpawnNpcRequestPacket
-    {
-        [ProtoMember(1)] public int PlayerId;
-        [ProtoMember(2)] public int SpawnPositionIndex;
-    }
-
-    [ProtoContract]
     public class SpawnNpcPacket
     {
         [ProtoMember(1)] public int   NpcId;
@@ -129,33 +120,6 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(4)] public float PosZ;
         [ProtoMember(5)] public int   NpcType;
         [ProtoMember(6)] public float MaxHp;
-    }
-
-    [ProtoContract]
-    public class SpawnMissileRequestPacket
-    {
-        [ProtoMember(1)] public int PlayerId;
-        [ProtoMember(2)] public float OriginX;
-        [ProtoMember(3)] public float OriginY;
-        [ProtoMember(4)] public float OriginZ;
-        [ProtoMember(5)] public float DirX;
-        [ProtoMember(6)] public float DirY;
-        [ProtoMember(7)] public float DirZ;
-        [ProtoMember(8)] public int WeaponIndex;
-    }
-
-    [ProtoContract]
-    public class SpawnMissilePacket
-    {
-        [ProtoMember(1)] public int MissileId;
-        [ProtoMember(2)] public int OwnerPlayerId;
-        [ProtoMember(3)] public float OriginX;
-        [ProtoMember(4)] public float OriginY;
-        [ProtoMember(5)] public float OriginZ;
-        [ProtoMember(6)] public float DirX;
-        [ProtoMember(7)] public float DirY;
-        [ProtoMember(8)] public float DirZ;
-        [ProtoMember(9)] public int WeaponIndex;
     }
 
     [ProtoContract]
@@ -171,14 +135,17 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(8)] public float RotZ;
         [ProtoMember(9)] public float CurrentHp;
         [ProtoMember(10)] public float MaxHp;
-        [ProtoMember(11)] public int WeaponIndex;
+        [ProtoMember(11)] public int CurrentGrippingItem;
+        [ProtoMember(12)] public int HotkeyIndex;
     }
 
     [ProtoContract]
     public class WeaponChangePacket
     {
         [ProtoMember(1)] public int PlayerId;
-        [ProtoMember(2)] public int WeaponIndex;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int SlotIndex;
+        [ProtoMember(4)] public int ItemName;
     }
 
     [ProtoContract]
@@ -473,5 +440,67 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(4)] public int InventoryShortcut2;
         [ProtoMember(5)] public int InventoryShortcut3;
         [ProtoMember(6)] public int InventoryShortcut4;
+        [ProtoMember(7)] public int CurrentGrippingItemId;
+    }
+
+    [ProtoContract]
+    public class ShortcutSwitchRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int SlotIndex;
+    }
+
+    [ProtoContract]
+    public class ShortcutSwitchResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int SlotIndex;
+        [ProtoMember(4)] public int CurrentGrippingItemId;
+        [ProtoMember(5)] public int CurrentGrippingItemType;
+    }
+    
+    [ProtoContract]
+    public class BuildingBtnRequestpacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class BuildingBtnResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int ItemName;
+        [ProtoMember(4)] public int Amount;
+    }
+
+    // ── 새 피격 / 사망 시스템 ────────────────────────────────────────────
+
+    [ProtoContract]
+    public class HitRequestPacket
+    {
+        [ProtoMember(1)]  public int   AttackerId;
+        [ProtoMember(2)]  public int   FieldId;
+        [ProtoMember(3)]  public int   WeaponItemName; // ItemName enum 값
+        [ProtoMember(4)]  public int   TargetId;
+        [ProtoMember(5)]  public int   TargetType;     // HitTargetType
+        [ProtoMember(6)]  public float HitPosX;
+        [ProtoMember(7)]  public float HitPosY;
+        [ProtoMember(8)]  public float HitPosZ;
+        [ProtoMember(9)]  public float HitNormalX;
+        [ProtoMember(10)] public float HitNormalY;
+        [ProtoMember(11)] public float HitNormalZ;
+    }
+
+    [ProtoContract]
+    public class DeathRequestPacket
+    {
+        [ProtoMember(1)] public int TargetId;
+        [ProtoMember(2)] public int TargetType;  // HitTargetType
+        [ProtoMember(3)] public int AttackerId;
+        [ProtoMember(4)] public int FieldId;
     }
 }

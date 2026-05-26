@@ -1,4 +1,6 @@
 ﻿
+using System;
+
 namespace CapstoneUdpServer.Network;
 
 public class ServerConfig
