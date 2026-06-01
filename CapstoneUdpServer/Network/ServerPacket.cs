@@ -98,6 +98,11 @@ public enum InGamePacketType
     AnimTrigger,
     HitRequest,
     DeathRequest,
+
+    InterceptTargetRequest,
+    InterceptTargetEvent,
+    InterceptRotation,
+    InterceptFire,
 }
 
 #region 로비 패킷

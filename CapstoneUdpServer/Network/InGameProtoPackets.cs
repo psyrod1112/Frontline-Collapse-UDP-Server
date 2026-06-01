@@ -4,7 +4,7 @@ using ProtoBuf;
 
 namespace CapstoneUdpServer.Network
 {
-    public enum HitTargetType { Player, MovingUnit, Building, Environment }
+    public enum UnitType { Player, MovingUnit, Building, Environment }
     public enum AnimTriggerType { Jump = 0, ThrowGrenade = 1, Hit = 2, Shot = 3 }
 
     [ProtoContract]
@@ -475,6 +475,44 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(2)] public int FieldId;
         [ProtoMember(3)] public int ItemName;
         [ProtoMember(4)] public int Amount;
+    }
+
+    // ── 인터셉트 미사일 타겟팅 ───────────────────────────────────────────
+
+    [ProtoContract]
+    public class InterceptTargetRequestPacket
+    {
+        [ProtoMember(1)] public int OwnerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int BuildingId;
+        [ProtoMember(4)] public int TargetNetworkId;
+        [ProtoMember(5)] public int TargetType;
+    }
+
+    [ProtoContract]
+    public class InterceptTargetEventPacket
+    {
+        [ProtoMember(1)] public int BuildingId;
+        [ProtoMember(2)] public int TargetNetworkId;
+        [ProtoMember(3)] public int TargetType;
+    }
+
+    [ProtoContract]
+    public class InterceptRotationPacket
+    {
+        [ProtoMember(1)] public int   OwnerId;
+        [ProtoMember(2)] public int   BuildingId;
+        [ProtoMember(3)] public float AimRotY;
+        [ProtoMember(4)] public float AimPitch;
+    }
+
+    [ProtoContract]
+    public class InterceptFirePacket
+    {
+        [ProtoMember(1)] public int OwnerId;
+        [ProtoMember(2)] public int BuildingId;
+        [ProtoMember(3)] public int TargetNetworkId;
+        [ProtoMember(4)] public int TargetType;
     }
 
     // ── 새 피격 / 사망 시스템 ────────────────────────────────────────────

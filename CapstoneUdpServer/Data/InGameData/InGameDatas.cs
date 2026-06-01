@@ -21,7 +21,7 @@ public enum ItemName
     Sniper_Normal,
     Sniper_Barret,
     NormalGrenade,
-    Tank,
+    AirPlane,
     Bazuka,
     GyunInPo,
     Turret,

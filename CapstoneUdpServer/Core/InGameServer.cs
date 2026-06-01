@@ -142,6 +142,18 @@ public class InGameServer
                     var deathRequestPacket = ProtobufSerializer.Deserialize<DeathRequestPacket>(buffer);
                     HandleDeathRequest(deathRequestPacket);
                     break;
+                case (uint)InGamePacketType.InterceptTargetRequest:
+                    var interceptTargetPacket = ProtobufSerializer.Deserialize<InterceptTargetRequestPacket>(buffer);
+                    HandleInterceptTargetRequest(interceptTargetPacket);
+                    break;
+                case (uint)InGamePacketType.InterceptRotation:
+                    var interceptRotationPacket = ProtobufSerializer.Deserialize<InterceptRotationPacket>(buffer);
+                    HandleInterceptRotation(interceptRotationPacket);
+                    break;
+                case (uint)InGamePacketType.InterceptFire:
+                    var interceptFirePacket = ProtobufSerializer.Deserialize<InterceptFirePacket>(buffer);
+                    HandleInterceptFire(interceptFirePacket);
+                    break;
             }
         }
         
@@ -306,13 +318,13 @@ public class InGameServer
     {
         if (targetId == 0) return;
 
-        var targetType = (CapstoneUdpServer.Network.HitTargetType)targetTypeValue;
+        var targetType = (UnitType)targetTypeValue;
         int rawDamage = CombatData.GetWeaponDamage(weaponType);
         float currentHp;
         float maxHp;
         int finalDamage;
 
-        if (targetType == CapstoneUdpServer.Network.HitTargetType.Building)
+        if (targetType == UnitType.Building)
         {
             //if (!inGameData.TryGetBuilding(targetId, out var building, out _) || building == null) return;
 
@@ -326,7 +338,7 @@ public class InGameServer
         {
             if (!inGameData.PlayerUnitDataMap.TryGetValue(targetId, out var unit)) return;
 
-            int defense = targetType == CapstoneUdpServer.Network.HitTargetType.Player ? 5 : 10;
+            int defense = targetType == UnitType.Player ? 5 : 10;
             finalDamage = Math.Max(1, rawDamage - defense);
             unit.CurrentHp = Math.Max(0f, unit.CurrentHp - finalDamage);
             currentHp = unit.CurrentHp;
@@ -389,17 +401,24 @@ public class InGameServer
     private void HandleHitRequest(HitRequestPacket packet)
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
-
+        if(!inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var attackerData)) return;
+        if (attackerData.CurrentGrippingItem != (ItemName)packet.WeaponItemName)
+        {
+            Console.WriteLine("서버에서 들고있는 무기랑 클라의 무기랑 다른 것 같음!");
+            //TODO: 에러 메시지 띄우기
+            return;
+        }
+        
         var itemName   = (ItemName)packet.WeaponItemName;
-        var targetType = (CapstoneUdpServer.Network.HitTargetType)packet.TargetType;
+        var targetType = (UnitType)packet.TargetType;
         int rawDamage  = CombatData.GetDamageByItemName(itemName);
 
-        float currentHp = 0f, maxHp = 0f;
-        int   finalDamage = 0;
+        float currentHp, maxHp;
+        int   finalDamage;
 
         switch (targetType)
         {
-            case CapstoneUdpServer.Network.HitTargetType.MovingUnit:
+            case UnitType.MovingUnit:
             {
                 if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc) || !npc.IsAlive) return;
                 finalDamage   = Math.Max(1, rawDamage);
@@ -408,7 +427,7 @@ public class InGameServer
                 maxHp         = npc.MaxHp;
                 break;
             }
-            case CapstoneUdpServer.Network.HitTargetType.Player:
+            case UnitType.Player:
             {
                 if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.TargetId, out var unit)) return;
                 if (unit.IsDead) return;
@@ -418,7 +437,7 @@ public class InGameServer
                 maxHp          = unit.MaxHp;
                 break;
             }
-            case CapstoneUdpServer.Network.HitTargetType.Building:
+            case UnitType.Building:
             {
                 if (!inGameData.BuildingDataMap.TryGetValue(packet.TargetId, out var building)) return;
                 var stat           = CombatData.GetBuildingStat(building.BuildingType);
@@ -457,11 +476,11 @@ public class InGameServer
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
 
-        var targetType = (CapstoneUdpServer.Network.HitTargetType)packet.TargetType;
+        var targetType = (UnitType)packet.TargetType;
 
         switch (targetType)
         {
-            case CapstoneUdpServer.Network.HitTargetType.MovingUnit:
+            case UnitType.MovingUnit:
             {
                 if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc)) return;
                 if (!npc.IsAlive) return; // 이미 처리됨
@@ -474,7 +493,7 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.MovingUnit,
+                        TargetType = (int)UnitType.MovingUnit,
                         KillerId   = packet.AttackerId,
                         GoldReward = 100,
                     }));
@@ -499,7 +518,7 @@ public class InGameServer
                 Console.WriteLine($"[Death] NPC npcId={packet.TargetId} killed by player={packet.AttackerId}");
                 break;
             }
-            case CapstoneUdpServer.Network.HitTargetType.Player:
+            case UnitType.Player:
             {
                 if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.TargetId, out var unit)) return;
                 if (!unit.IsDead)       return; // HP 가 0 이 아님
@@ -513,7 +532,7 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.Player,
+                        TargetType = (int)UnitType.Player,
                         KillerId   = packet.AttackerId,
                         GoldReward = 200,
                     }));
@@ -542,7 +561,7 @@ public class InGameServer
                 Console.WriteLine($"[Death] Player targetId={packet.TargetId} killed by player={packet.AttackerId}");
                 break;
             }
-            case CapstoneUdpServer.Network.HitTargetType.Building:
+            case UnitType.Building:
             {
                 if (!inGameData.BuildingDataMap.TryGetValue(packet.TargetId, out var building)) return;
                 if (building.CurrentHp > 0f) return; // 아직 살아있음
@@ -555,7 +574,7 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.Building,
+                        TargetType = (int)UnitType.Building,
                         KillerId   = packet.AttackerId,
                         GoldReward = 50,
                     }));
@@ -626,17 +645,17 @@ public class InGameServer
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
 
         var weaponType = (WeaponType)packet.WeaponType;
-        var targetType = (CapstoneUdpServer.Network.HitTargetType)packet.TargetType;
+        var targetType = (UnitType)packet.TargetType;
         int rawDamage  = CombatData.GetWeaponDamage(weaponType);
 
         float currentHp = 0, maxHp = 0;
         int   finalDamage = 0;
 
-        if (targetType == CapstoneUdpServer.Network.HitTargetType.Building)
+        if (targetType == UnitType.Building)
         {
             
         }
-        else if (targetType == CapstoneUdpServer.Network.HitTargetType.MovingUnit)
+        else if (targetType == UnitType.MovingUnit)
         {
             if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc) || !npc.IsAlive) return;
 
@@ -655,7 +674,7 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.MovingUnit,
+                        TargetType = (int)UnitType.MovingUnit,
                         KillerId   = packet.AttackerId,
                         GoldReward = 100,
                     });
@@ -683,7 +702,7 @@ public class InGameServer
                 }
             }
         }
-        else if (targetType == CapstoneUdpServer.Network.HitTargetType.Player)
+        else if (targetType == UnitType.Player)
         {
             if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.TargetId, out var unit)) return;
 
@@ -701,7 +720,7 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)CapstoneUdpServer.Network.HitTargetType.Player,
+                        TargetType = (int)UnitType.Player,
                         KillerId   = packet.AttackerId,
                         GoldReward = 200,
                     });
@@ -1007,6 +1026,40 @@ public class InGameServer
         // 트리거 이벤트를 해당 필드의 다른 모든 플레이어에게 브로드캐스트
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.AnimTrigger, packet);
         inGameData.Broadcast(_socket, buf, excludePlayerId: packet.PlayerId);
+    }
+
+    private void HandleInterceptTargetRequest(InterceptTargetRequestPacket packet)
+    {
+        if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
+        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.OwnerId, out var ownerUnit)) return;
+
+        SendProto((uint)InGamePacketType.InterceptTargetEvent,
+            new InterceptTargetEventPacket
+            {
+                BuildingId      = packet.BuildingId,
+                TargetNetworkId = packet.TargetNetworkId,
+                TargetType      = packet.TargetType,
+            },
+            (IPEndPoint)ownerUnit.IpEndPoint);
+    }
+
+    private void HandleInterceptRotation(InterceptRotationPacket packet)
+    {
+        if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
+        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.InterceptRotation, packet);
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleInterceptFire(InterceptFirePacket packet)
+    {
+        if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
+        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.InterceptFire, packet);
+        inGameData.Broadcast(_socket, buf);
     }
 
     // ─────────────────────────────────────────────────────────────
