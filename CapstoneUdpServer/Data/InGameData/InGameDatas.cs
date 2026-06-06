@@ -23,6 +23,7 @@ public enum ItemName
     NormalGrenade,
     AirPlane,
     Bazuka,
+    Tank,
     GyunInPo,
     Turret,
     CheckPoint,
@@ -148,10 +149,8 @@ public class InGameDatas
 
         ItemName.HealPack                                => ItemType.Heal,
 
-        ItemName.NormalMissile or ItemName.NuclearMissile => ItemType.Missile,
+        ItemName.NormalMissile or ItemName.NuclearMissile or ItemName.AirPlane => ItemType.Missile,
 
         _ => ItemType.None
-    };
-    
-    
+    };    
 }
