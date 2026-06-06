@@ -103,6 +103,8 @@ public enum InGamePacketType
     InterceptTargetEvent,
     InterceptRotation,
     InterceptFire,
+    CaptureRequest,
+    CaptureResponse,
 }
 
 #region 로비 패킷

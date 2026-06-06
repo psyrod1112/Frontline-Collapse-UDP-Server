@@ -142,6 +142,10 @@ public class InGameServer
                     var deathRequestPacket = ProtobufSerializer.Deserialize<DeathRequestPacket>(buffer);
                     HandleDeathRequest(deathRequestPacket);
                     break;
+                case (uint)InGamePacketType.CaptureRequest:
+                    var capturePacket = ProtobufSerializer.Deserialize<CaptureRequestPacket>(buffer);
+                    HandleCaptureRequest(capturePacket, clientEp);
+                    break;
                 case (uint)InGamePacketType.InterceptTargetRequest:
                     var interceptTargetPacket = ProtobufSerializer.Deserialize<InterceptTargetRequestPacket>(buffer);
                     HandleInterceptTargetRequest(interceptTargetPacket);
@@ -488,6 +492,11 @@ public class InGameServer
                 npc.IsAlive = false;
                 inGameData.NpcMap.TryRemove(packet.TargetId, out _);
 
+                // 보스 몬스터 여부에 따라 보상 차등 지급
+                bool isBoss  = npc.NpcType == 1;
+                int  gold    = isBoss ? 500 : 100;
+                int  exp     = isBoss ? 300 : 100;
+
                 inGameData.Broadcast(_socket, ProtobufSerializer.Serialize(
                     (uint)InGamePacketType.DeathEvent,
                     new DeathEventPacket
@@ -495,27 +504,35 @@ public class InGameServer
                         TargetId   = packet.TargetId,
                         TargetType = (int)UnitType.MovingUnit,
                         KillerId   = packet.AttackerId,
-                        GoldReward = 100,
+                        GoldReward = gold,
                     }));
 
                 if (packet.AttackerId != 0
                     && inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var npcKiller))
                 {
-                    npcKiller.Gold += 100;
-                    npcKiller.Exp  += 100;
+                    npcKiller.Gold += gold;
+                    npcKiller.Exp  += exp;
                     npcKiller.CSCount++;
+
+                    // 보스 처치 시 바주카포 지급
+                    if (isBoss)
+                    {
+                        npcKiller.AddInventory(ItemName.Bazuka);
+                        Console.WriteLine($"[Boss] 바주카포 지급 → PlayerId: {packet.AttackerId}");
+                    }
+
                     SendProto((uint)InGamePacketType.RewardUpdate, new RewardUpdatePacket
                     {
                         PlayerId    = npcKiller.PlayerId,
-                        GoldAmount  = 100,  TotalGold   = npcKiller.Gold,
-                        ExpAmount   = 100,  TotalExp    = npcKiller.Exp,
+                        GoldAmount  = gold,  TotalGold   = npcKiller.Gold,
+                        ExpAmount   = exp,  TotalExp    = npcKiller.Exp,
                         CSCount     = npcKiller.CSCount,
                         Level       = npcKiller.Level,
                         RequiredExp = npcKiller.RequiredExp,
                     }, (IPEndPoint)npcKiller.IpEndPoint);
                 }
 
-                Console.WriteLine($"[Death] NPC npcId={packet.TargetId} killed by player={packet.AttackerId}");
+                Console.WriteLine($"[Death] {(isBoss ? "보스" : "NPC")} npcId={packet.TargetId} killed by={packet.AttackerId}");
                 break;
             }
             case UnitType.Player:
@@ -1062,6 +1079,44 @@ public class InGameServer
         inGameData.Broadcast(_socket, buf);
     }
 
+    private void HandleCaptureRequest(CaptureRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+
+        Console.WriteLine($"[InGameServer] 점령 요청 → PlayerId: {packet.PlayerId}");
+
+        // 확률로 보상 결정 (80% 유도미사일 / 15% 핵미사일 / 5% 비행기)
+        double roll = _rng.NextDouble() * 100.0;
+        if (roll < 80.0)
+        {
+            unit.GuidedMissileCount += 1;
+            Console.WriteLine($"[InGameServer] 유도미사일 +1 → PlayerId: {packet.PlayerId}");
+        }
+        else if (roll < 95.0)
+        {
+            unit.NukeMissileCount += 1;
+            Console.WriteLine($"[InGameServer] 핵미사일 +1 → PlayerId: {packet.PlayerId}");
+        }
+        else
+        {
+            unit.AddInventory(ItemName.AirPlane);
+            Console.WriteLine($"[InGameServer] 비행기 지급 → PlayerId: {packet.PlayerId}");
+        }
+
+        // 모든 클라이언트에게 쿨타임 브로드캐스트
+        byte[] buf = ProtobufSerializer.Serialize(
+            (uint)InGamePacketType.CaptureResponse,
+            new CaptureResponsePacket
+            {
+                PlayerId    = packet.PlayerId,
+                CooldownSec = 180,
+            });
+        inGameData.Broadcast(_socket, buf);
+
+        Console.WriteLine($"[InGameServer] 점령 브로드캐스트 완료 → FieldId: {packet.FieldId}");
+    }
+
     // ─────────────────────────────────────────────────────────────
     #region NPC
 
@@ -1075,6 +1130,9 @@ public class InGameServer
             float spawnTimer     = NpcSpawnInterval; // 첫 틱에 즉시 스폰 시도
             float broadcastTimer = 0f;
             var   lastTime       = DateTime.UtcNow;
+
+            //게임 시작 시 보스 고정 위치에 스폰
+            SpawnBossMonsters(fieldId, inGameData);
 
             while (_running)
             {
@@ -1136,6 +1194,54 @@ public class InGameServer
         });
         inGameData.Broadcast(_socket, buf);
         Console.WriteLine($"[NPC] 스폰 NpcId={npcId}, fieldId={fieldId}, alive={alive + 1}");
+    }
+
+    /// <summary>
+    /// 게임 시작 시 탑/미드 외곽 끝 모서리에 보스 고정 스폰.
+    /// NpcType = 1 로 등록 → HandleDeathRequest에서 보상 구분.
+    /// 좌표는 실제 맵 확인 후 수정 필요.
+    /// </summary>
+    private void SpawnBossMonsters(int fieldId, InGameData inGameData)
+    {
+        var bossPositions = new[]
+        {
+            new System.Numerics.Vector3(370f, 2f, 370f), // 탑 좌측 모서리
+            new System.Numerics.Vector3(430f, 2f, 370f), // 탑 우측 모서리
+            new System.Numerics.Vector3(370f, 2f, 430f), // 미드 좌측 모서리
+            new System.Numerics.Vector3(430f, 2f, 430f), // 미드 우측 모서리
+        };
+
+        foreach (var pos in bossPositions)
+        {
+            int npcId = inGameData.NextNpcId();
+
+            var boss = new NpcData
+            {
+                NpcId     = npcId,
+                NpcType   = 1,      // 1 = 보스
+                MaxHp     = 500f,   // 일반 NPC(100f)보다 높게
+                CurrentHp = 500f,
+                IsAlive   = true,
+                Position  = pos,
+            };
+            boss.PickNewDirection();
+            inGameData.NpcMap[npcId] = boss;
+
+            var buf = ProtobufSerializer.Serialize(
+                (uint)InGamePacketType.SpawnNpc,
+                new SpawnNpcPacket
+                {
+                    NpcId   = npcId,
+                    PosX    = pos.X,
+                    PosY    = pos.Y,
+                    PosZ    = pos.Z,
+                    NpcType = 1,    // 클라이언트가 bossPrefab으로 생성하도록
+                    MaxHp   = 500f,
+                });
+            inGameData.Broadcast(_socket, buf);
+
+            Console.WriteLine($"[Boss] 보스 스폰 NpcId={npcId} 위치=({pos.X},{pos.Z})");
+        }
     }
 
     private void TickAndBroadcastNpcs(InGameData inGameData, float dt)

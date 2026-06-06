@@ -541,4 +541,18 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(3)] public int AttackerId;
         [ProtoMember(4)] public int FieldId;
     }
+
+    [ProtoContract]
+    public class CaptureRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class CaptureResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int CooldownSec;
+    }
 }
