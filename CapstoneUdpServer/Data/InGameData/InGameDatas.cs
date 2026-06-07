@@ -30,47 +30,12 @@ public enum ItemName
     HealPack,
     NormalMissile,
     NuclearMissile,
+    Tank,
+    Bullet,
+    Shell
 }
 
 
-public enum WeaponType
-{
-    None,
-    Rifle,
-    Sniper,
-    Grenade,
-    SmokeGrenade,
-    MissileGuided,
-    MissileNuke,
-    MissileChem,
-}
-
-public enum BuildingType
-{
-    Artillery,
-    RadarArtillery,
-    Interceptor,
-    Barricade,
-    Shelter,
-    MedBay,
-    TrainingCenter,
-    Workshop,
-    Warehouse,
-    ControlTower,
-}
-
-
-
-public enum NPCType
-{
-    Normal,
-    Chaos,
-}
-
-public class WeaponStat
-{
-    public int Damage { get; set; }
-}
 
 public class BuildingStat
 {
@@ -80,15 +45,6 @@ public class BuildingStat
 
 public static class CombatData
 {
-    public static readonly Dictionary<WeaponType, WeaponStat> WeaponStats = new()
-    {
-        [WeaponType.Rifle] = new WeaponStat { Damage = 20 },
-        [WeaponType.Sniper] = new WeaponStat { Damage = 65 },
-        [WeaponType.Grenade] = new WeaponStat { Damage = 90 },
-        [WeaponType.MissileGuided] = new WeaponStat { Damage = 180 },
-        [WeaponType.MissileNuke] = new WeaponStat { Damage = 400 },
-    };
-
     // BuildingType 없이 ItemName으로 직접 스탯 관리
     public static readonly Dictionary<ItemName, BuildingStat> BuildingStats = new()
     {
@@ -98,20 +54,16 @@ public static class CombatData
         [ItemName.CheckPoint] = new BuildingStat { MaxHp = 800f, Defense = 70 },
     };
 
-    public static int GetWeaponDamage(WeaponType type)
-    {
-        return WeaponStats.TryGetValue(type, out var stat) ? stat.Damage : 10;
-    }
-
-    // ItemName → Damage (HitRequestPacket 용)
     private static readonly Dictionary<ItemName, int> ItemDamageMap = new()
     {
-        [ItemName.Rifle_Normal]   = 20,
-        [ItemName.Rifle_HK416]   = 25,
-        [ItemName.Sniper_Normal]  = 65,
-        [ItemName.Sniper_Barret]  = 80,
-        [ItemName.NormalGrenade]  = 90,
-        [ItemName.Bazuka]         = 70,
+        [ItemName.Rifle_Normal]    = 20,
+        [ItemName.Rifle_HK416]    = 25,
+        [ItemName.Sniper_Normal]   = 65,
+        [ItemName.Sniper_Barret]   = 80,
+        [ItemName.NormalGrenade]   = 90,
+        [ItemName.Bazuka]          = 70,
+        [ItemName.NormalMissile]   = 180,
+        [ItemName.NuclearMissile]  = 400,
     };
 
     public static int GetDamageByItemName(ItemName itemName) =>

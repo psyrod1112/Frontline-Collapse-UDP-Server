@@ -27,4 +27,21 @@ public class BuildingData
     
     public BuildingState State { get; set; }
 
+    public int MissileCount       => NormalMissileCount + NuclearMissileCount;
+    public int NormalMissileCount { get; set; }
+    public int NuclearMissileCount { get; set; }
+    
+
+    public void LoadMissile(ItemName missileType)
+    {
+        switch (missileType)
+        {
+            case ItemName.NormalMissile:
+                NormalMissileCount++;
+                break;
+            case ItemName.NuclearMissile:
+                NuclearMissileCount++;
+                break;
+        }
+    }
 }

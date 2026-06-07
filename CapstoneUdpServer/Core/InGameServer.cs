@@ -58,6 +58,7 @@ public class InGameServer
             uint packetType = ProtobufSerializer.PeekType(buffer);
             switch (packetType)
             {
+                // ── 플레이어 이동/상태 ───────────────────────────────────────────────
                 case (uint)InGamePacketType.PlayerInput:
                     var packet = ProtobufSerializer.Deserialize<PlayerInputPacket>(buffer);
                     HandlePlayerInput(packet, clientEp);
@@ -66,33 +67,19 @@ public class InGameServer
                     var uiReqPacket = ProtobufSerializer.Deserialize<UIUpdateRequestPacket>(buffer);
                     HandleUIUpdateRequest(uiReqPacket, clientEp);
                     break;
+
+                // ── 전투 (발사/피격/사망) ────────────────────────────────────────────
                 case (uint)InGamePacketType.FireEvent:
                     var firePacket = ProtobufSerializer.Deserialize<FireEventPacket>(buffer);
                     HandleFireEvent(firePacket);
                     break;
-                case (uint)InGamePacketType.WeaponChange:
-                    var wcPacket = ProtobufSerializer.Deserialize<WeaponChangePacket>(buffer);
-                    HandleWeaponChange(wcPacket);
+                case (uint)InGamePacketType.AnimTrigger:
+                    var animTriggerPacket = ProtobufSerializer.Deserialize<AnimTriggerPacket>(buffer);
+                    HandleAnimTrigger(animTriggerPacket);
                     break;
-                case (uint)InGamePacketType.BuildingPlace:
-                    var buildingPlacePacket = ProtobufSerializer.Deserialize<BuildingPlacePacket>(buffer);
-                    HandleBuildingPlace(buildingPlacePacket);
-                    break;
-                case (uint)InGamePacketType.BuildingDestroy:
-                    var buildingDestroyPacket = ProtobufSerializer.Deserialize<BuildingDestroyPacket>(buffer);
-                    HandleBuildingDestroy(buildingDestroyPacket);
-                    break;
-                case (uint)InGamePacketType.HotkeySlotSave:
-                    var hsPacket = ProtobufSerializer.Deserialize<HotkeySavePacket>(buffer);
-                    HandleHotkeySlotSave(hsPacket);
-                    break;
-                case (uint)InGamePacketType.MissileLoadRequest:
-                    var mlPacket = ProtobufSerializer.Deserialize<MissileLoadRequestPacket>(buffer);
-                    HandleMissileLoadRequest(mlPacket, clientEp);
-                    break;
-                case (uint)InGamePacketType.MissileLaunch:
-                    var launchPacket = ProtobufSerializer.Deserialize<MissileLaunchPacket>(buffer);
-                    HandleMissileLaunch(launchPacket);
+                case (uint)InGamePacketType.HitRequest:
+                    var hitRequestPacket = ProtobufSerializer.Deserialize<HitRequestPacket>(buffer);
+                    HandleHitRequest(hitRequestPacket);
                     break;
                 case (uint)InGamePacketType.MissileHitRequest:
                     var hitPacket = ProtobufSerializer.Deserialize<MissileHitRequestPacket>(buffer);
@@ -102,6 +89,12 @@ public class InGameServer
                     var damageEventPacket = ProtobufSerializer.Deserialize<DamageEventPacket>(buffer);
                     HandleDamageEvent(damageEventPacket);
                     break;
+                case (uint)InGamePacketType.DeathRequest:
+                    var deathRequestPacket = ProtobufSerializer.Deserialize<DeathRequestPacket>(buffer);
+                    HandleDeathRequest(deathRequestPacket);
+                    break;
+
+                // ── 리스폰/스코어 ─────────────────────────────────────────────────
                 case (uint)InGamePacketType.RespawnRequest:
                     var respawnPacket = ProtobufSerializer.Deserialize<RespawnRequestPacket>(buffer);
                     HandleRespawnRequest(respawnPacket, clientEp);
@@ -110,6 +103,8 @@ public class InGameServer
                     var scoreBoardPacket = ProtobufSerializer.Deserialize<ScoreBoardRequestPacket>(buffer);
                     HandleScoreBoardRequest(scoreBoardPacket, clientEp);
                     break;
+
+                // ── 인벤토리/상점 ─────────────────────────────────────────────────
                 case (uint)InGamePacketType.BuyRequest:
                     var buyRequestPacket = ProtobufSerializer.Deserialize<BuyRequestPacket>(buffer);
                     HandleBuyRequest(buyRequestPacket, clientEp);
@@ -126,21 +121,37 @@ public class InGameServer
                     var shortcutSwitchRequestPacket = ProtobufSerializer.Deserialize<ShortcutSwitchRequestPacket>(buffer);
                     HandleShortcutSwitchRequest(shortcutSwitchRequestPacket, clientEp);
                     break;
+                case (uint)InGamePacketType.HotkeySlotSave:
+                    var hsPacket = ProtobufSerializer.Deserialize<HotkeySavePacket>(buffer);
+                    HandleHotkeySlotSave(hsPacket);
+                    break;
+                case (uint)InGamePacketType.WeaponChange:
+                    var wcPacket = ProtobufSerializer.Deserialize<WeaponChangePacket>(buffer);
+                    HandleWeaponChange(wcPacket);
+                    break;
+
+                // ── 건물 ──────────────────────────────────────────────────────────
+                case (uint)InGamePacketType.BuildingPlace:
+                    var buildingPlacePacket = ProtobufSerializer.Deserialize<BuildingPlacePacket>(buffer);
+                    HandleBuildingPlace(buildingPlacePacket);
+                    break;
                 case (uint)InGamePacketType.BuildingBtnRequest:
                     var buildingBtnRequestPacket = ProtobufSerializer.Deserialize<BuildingBtnRequestpacket>(buffer);
                     HandleBuildingBtnRequest(buildingBtnRequestPacket, clientEp);
                     break;
-                case (uint)InGamePacketType.AnimTrigger:
-                    var animTriggerPacket = ProtobufSerializer.Deserialize<AnimTriggerPacket>(buffer);
-                    HandleAnimTrigger(animTriggerPacket);
+                case (uint)InGamePacketType.ArtilleryInfoRequest:
+                    var artilleryInfoPacket = ProtobufSerializer.Deserialize<ArtilleryInfoRequestPacket>(buffer);
+                    HandleArtilleryInfoRequest(artilleryInfoPacket, clientEp);
                     break;
-                case (uint)InGamePacketType.HitRequest:
-                    var hitRequestPacket = ProtobufSerializer.Deserialize<HitRequestPacket>(buffer);
-                    HandleHitRequest(hitRequestPacket);
+
+                // ── 미사일포 (Intercept System) ────────────────────────────────────
+                case (uint)InGamePacketType.MissileLoadRequest:
+                    var mlPacket = ProtobufSerializer.Deserialize<MissileLoadRequestPacket>(buffer);
+                    HandleMissileLoadRequest(mlPacket, clientEp);
                     break;
-                case (uint)InGamePacketType.DeathRequest:
-                    var deathRequestPacket = ProtobufSerializer.Deserialize<DeathRequestPacket>(buffer);
-                    HandleDeathRequest(deathRequestPacket);
+                case (uint)InGamePacketType.MissileLaunch:
+                    var launchPacket = ProtobufSerializer.Deserialize<MissileLaunchPacket>(buffer);
+                    HandleMissileLaunch(launchPacket);
                     break;
                 case (uint)InGamePacketType.InterceptTargetRequest:
                     var interceptTargetPacket = ProtobufSerializer.Deserialize<InterceptTargetRequestPacket>(buffer);
@@ -158,6 +169,8 @@ public class InGameServer
         }
         
     }
+
+    #region 플레이어 이동/상태
 
     private void HandleUIUpdateRequest(UIUpdateRequestPacket packet, IPEndPoint clientEp)
     {
@@ -186,6 +199,10 @@ public class InGameServer
         }, clientEp);
     }
     
+    #endregion
+
+    #region 건물
+
     private void HandleBuildingPlace(BuildingPlacePacket packet)
     {
         if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
@@ -193,7 +210,7 @@ public class InGameServer
         if (!inGameData.PlayerUnitDataMap.ContainsKey(packet.OwnerId)) return;
 
         // 서버에서 고유 BuildingId 발급
-        packet.BuildingId = inGameData.NextBuildingId();
+        packet.BuildingId = inGameData.NextBuildingId() + 10000;
 
         var itemName = (ItemName)packet.BuildingType;
         var stat     = CombatData.GetBuildingStat(itemName);
@@ -205,7 +222,7 @@ public class InGameServer
             BuildingType = itemName,
             MaxHp        = stat.MaxHp,
             CurrentHp    = stat.MaxHp,
-            PosX         = packet.PosX,
+            PosX         = packet.PosX, //TODO: 위치 정보는 필요 없을 수도 있다...
             PosY         = packet.PosY,
             PosZ         = packet.PosZ,
             RotY         = packet.RotY,
@@ -214,71 +231,85 @@ public class InGameServer
         // BuildingId 채워진 패킷으로 전체 브로드캐스트 (배치자 포함)
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.BuildingPlace, packet);
         inGameData.Broadcast(_socket, buf);
-        Console.WriteLine($"[Building] Id={packet.BuildingId}, Item={itemName}, Owner={packet.OwnerId}");
     }
 
-    private void HandleBuildingDestroy(BuildingDestroyPacket packet)
-    {
-        // if (!_store.TryGetInGame(packet.DestroyerId, out var playerData)) return;
-        // if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
-        //
-        // if (inGameData.TryGetBuilding(packet.BuildingId, out _, out var owner))
-        // {
-        //     owner?.Buildings.TryRemove(packet.BuildingId, out _);
-        //     inGameData.BuildingOwnerIndex.TryRemove(packet.BuildingId, out _);
-        // }
-        //
-        // byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.BuildingDestroy, packet);
-        // inGameData.Broadcast(_socket, buf, excludePlayerId: packet.DestroyerId);
-    }
+
+    #endregion
+
+    #region 미사일포 (Intercept System)
 
     private void HandleMissileLoadRequest(MissileLoadRequestPacket packet, IPEndPoint clientEp)
     {
-        // bool success = false;
-        // int remaining = 0;
-        //
-        // if (_store.TryGetInGame(packet.PlayerId, out var playerData)
-        //     && _inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)
-        //     && inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)
-        //     && inGameData.TryGetBuilding(packet.BuildingId, out var building, out _)
-        //     && building != null
-        //     && building.OwnerId == packet.PlayerId
-        //     && building.PrefabIndex == (int)BuildingType.Artillery)
-        // {
-        //     var missileType = (WeaponType)packet.MissileType;
-        //     if (packet.IsLoaded)
-        //     {
-        //         success = TryConsumeMissile(unit, missileType, out remaining);
-        //         if (success)
-        //         {
-        //             building.IsMissileLoaded = true;
-        //             building.LoadedMissileId = packet.MissileId;
-        //             building.LoadedMissileType = missileType;
-        //         }
-        //     }
-        //     else
-        //     {
-        //         success = building.IsMissileLoaded && building.LoadedMissileId == packet.MissileId;
-        //         if (success)
-        //         {
-        //             ReturnMissile(unit, building.LoadedMissileType, out remaining);
-        //             building.IsMissileLoaded = false;
-        //             building.LoadedMissileId = 0;
-        //             building.LoadedMissileType = WeaponType.None;
-        //         }
-        //     }
-        // }
-        //
-        // SendProto((uint)InGamePacketType.MissileLoadResponse, new MissileLoadResponsePacket
-        // {
-        //     PlayerId = packet.PlayerId,
-        //     BuildingId = packet.BuildingId,
-        //     MissileId = packet.MissileId,
-        //     MissileType = packet.MissileType,
-        //     IsLoaded = success && packet.IsLoaded,
-        //     Success = success,
-        //     RemainingMissileCount = remaining,
-        // }, clientEp);
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if(!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+        if (!inGameData.BuildingDataMap.TryGetValue(packet.BuildingId, out var artillery)) return;
+        if ((ItemName)packet.MissileType != ItemName.NormalMissile &&
+              (ItemName)packet.MissileType != ItemName.NuclearMissile)
+        {
+            SendProto((uint)InGamePacketType.ExceptionResponse,
+                new ExceptionPacket
+                {
+                    ErrorMessage = "미사일을 들고 장전하시오"
+                }, clientEp);
+            return;
+        }
+
+        var missileType = (ItemName)packet.MissileType;
+
+        if (!unit.HasItemInventory(missileType))
+        {
+            SendProto((uint)InGamePacketType.ExceptionResponse,
+                new ExceptionPacket
+                {
+                    ErrorMessage = "미사일이 부족합니다."
+                }, clientEp);
+            return;
+        }
+
+        if (unit.RemoveInventory(missileType))
+        {
+            switch (unit.CurrentSlotIndex)
+            {
+                case 0:
+                    unit.Shortcut1 = ItemName.None; break;
+                case 1:
+                    unit.Shortcut2 = ItemName.None; break;
+                case 2:
+                    unit.Shortcut3 = ItemName.None; break;
+                case 3:
+                    unit.Shortcut4 = ItemName.None; break;
+            }
+
+            unit.CurrentGrippingItem = ItemName.None;
+            
+            SendProto((uint)InGamePacketType.UIUpdateResponse, 
+                new UIUpdateResponsePacket
+            {
+                PlayerId = unit.PlayerId,
+                Shortcut1 = (int)unit.Shortcut1,
+                Shortcut2 = (int)unit.Shortcut2,
+                Shortcut3 = (int)unit.Shortcut3,
+                Shortcut4 = (int)unit.Shortcut4,
+            }, clientEp); //인게임 메인 UI의 미사일 -> 주먹(default)으로 바꿈
+            
+            byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.ShortcutSwitchResponse,
+                new ShortcutSwitchResponsePacket
+                {
+                    PlayerId = unit.PlayerId,
+                    CurrentGrippingItemId = (int)unit.CurrentGrippingItem
+                }); //미사일 소진해서 아무것도 안들고있게끔 브로드캐스팅
+            
+            inGameData.Broadcast(_socket, buf);
+        }
+        
+        artillery.LoadMissile(missileType);
+
+        SendProto((uint)InGamePacketType.MissileLoadResponse, new MissileLoadResponsePacket
+        {
+            PlayerId             = packet.PlayerId,
+            BuildingId           = packet.BuildingId,
+            MissileType = packet.MissileType
+        }, clientEp);
     }
 
     private void HandleMissileLaunch(MissileLaunchPacket packet)
@@ -302,7 +333,7 @@ public class InGameServer
         if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
 
-        var missileType = (WeaponType)packet.MissileType;
+        var missileType = (ItemName)packet.MissileType;
 
         ApplyMissileDamage(inGameData, packet.OwnerId, packet.DirectTargetId, packet.DirectTargetType, missileType);
         foreach (var target in packet.SplashTargets)
@@ -314,12 +345,12 @@ public class InGameServer
         int attackerId,
         int targetId,
         int targetTypeValue,
-        WeaponType weaponType)
+        ItemName weaponType)
     {
         if (targetId == 0) return;
 
         var targetType = (UnitType)targetTypeValue;
-        int rawDamage = CombatData.GetWeaponDamage(weaponType);
+        int rawDamage = CombatData.GetDamageByItemName(weaponType);
         float currentHp;
         float maxHp;
         int finalDamage;
@@ -356,33 +387,16 @@ public class InGameServer
         });
     }
 
-    private bool TryConsumeMissile(PlayerUnitData unit, WeaponType missileType, out int remaining)
-    {
-        remaining = 0;
-        switch (missileType)
-        {
-            case WeaponType.MissileGuided when unit.GuidedMissileCount > 0:
-                unit.GuidedMissileCount--;
-                remaining = unit.GuidedMissileCount;
-                return true;
-            case WeaponType.MissileNuke when unit.NukeMissileCount > 0:
-                unit.NukeMissileCount--;
-                remaining = unit.NukeMissileCount;
-                return true;
-            default:
-                return false;
-        }
-    }
 
-    private void ReturnMissile(PlayerUnitData unit, WeaponType missileType, out int remaining)
+    private void ReturnMissile(PlayerUnitData unit, ItemName missileType, out int remaining)
     {
         switch (missileType)
         {
-            case WeaponType.MissileGuided:
+            case ItemName.NormalMissile:
                 unit.GuidedMissileCount++;
                 remaining = unit.GuidedMissileCount;
                 break;
-            case WeaponType.MissileNuke:
+            case ItemName.NuclearMissile:
                 unit.NukeMissileCount++;
                 remaining = unit.NukeMissileCount;
                 break;
@@ -392,7 +406,9 @@ public class InGameServer
         }
     }
 
-    // ── 새 피격 / 사망 시스템 ────────────────────────────────────────────
+    #endregion
+
+    #region 전투 (피격/사망)
 
     /// <summary>
     /// BulletScript(IsMine) → HitRequestPacket → 데미지 계산 → DamageResultPacket 브로드캐스트
@@ -567,7 +583,7 @@ public class InGameServer
                 if (building.CurrentHp > 0f) return; // 아직 살아있음
 
                 // 건물 제거
-                inGameData.BuildingDataMap.TryRemove(packet.TargetId, out _);
+                //inGameData.BuildingDataMap.TryRemove(packet.TargetId, out _);
 
                 inGameData.Broadcast(_socket, ProtobufSerializer.Serialize(
                     (uint)InGamePacketType.DeathEvent,
@@ -591,6 +607,10 @@ public class InGameServer
         inGameData.Broadcast(_socket, buf);
     }
 
+    #endregion
+
+    #region 인벤토리/상점/무기
+
     private void HandleWeaponChange(WeaponChangePacket packet)
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
@@ -609,6 +629,7 @@ public class InGameServer
         if (newItem == ItemName.None) return;
 
         unit.CurrentGrippingItem = newItem;
+        unit.CurrentSlotIndex = packet.SlotIndex;
 
         // 브로드캐스트할 땐 서버 검증값으로 덮어쓰기
         packet.ItemName = (int)newItem;
@@ -644,9 +665,9 @@ public class InGameServer
         if (!_store.TryGetInGame(packet.AttackerId, out var playerData)) return;
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
 
-        var weaponType = (WeaponType)packet.WeaponType;
+        var weaponType = (ItemName)packet.WeaponType;
         var targetType = (UnitType)packet.TargetType;
-        int rawDamage  = CombatData.GetWeaponDamage(weaponType);
+        int rawDamage  = CombatData.GetDamageByItemName(weaponType);
 
         float currentHp = 0, maxHp = 0;
         int   finalDamage = 0;
@@ -777,6 +798,10 @@ public class InGameServer
         // TODO: 사망 처리 — Player/NPC currentHp <= 0 시 DeathEventPacket 전체 브로드캐스트, RewardUpdatePacket 공격자에게 전송
     }
 
+    #endregion
+
+    #region 리스폰/스코어
+
     private void HandleRespawnRequest(RespawnRequestPacket packet, IPEndPoint clientEp)
     {
         if (!_store.TryGetInGame(packet.PlayerId, out var playerData)) return;
@@ -880,6 +905,10 @@ public class InGameServer
                 new System.Numerics.Vector3(packet.PosX, packet.PosY, packet.PosZ),
                 new System.Numerics.Vector3(0, packet.RotationY, 0));
     }
+    #endregion
+
+    #region 인벤토리/상점/무기
+
     private void HandleBuyRequest(BuyRequestPacket packet, IPEndPoint clientEp)
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
@@ -1020,8 +1049,8 @@ public class InGameServer
 
     private void HandleAnimTrigger(AnimTriggerPacket packet)
     {
-        if (!_store.TryGetInGame(packet.PlayerId, out var playerData)) return;
-        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
 
         // 트리거 이벤트를 해당 필드의 다른 모든 플레이어에게 브로드캐스트
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.AnimTrigger, packet);
@@ -1030,10 +1059,10 @@ public class InGameServer
 
     private void HandleInterceptTargetRequest(InterceptTargetRequestPacket packet)
     {
-        if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
-        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
-        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.OwnerId, out var ownerUnit)) return;
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.OwnerId, out var unit)) return;
 
+        
         SendProto((uint)InGamePacketType.InterceptTargetEvent,
             new InterceptTargetEventPacket
             {
@@ -1041,28 +1070,56 @@ public class InGameServer
                 TargetNetworkId = packet.TargetNetworkId,
                 TargetType      = packet.TargetType,
             },
-            (IPEndPoint)ownerUnit.IpEndPoint);
+            (IPEndPoint)unit.IpEndPoint);
     }
 
     private void HandleInterceptRotation(InterceptRotationPacket packet)
     {
-        if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
-        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.OwnerId, out var unit)) return;
 
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.InterceptRotation, packet);
         inGameData.Broadcast(_socket, buf);
     }
 
+    private void HandleArtilleryInfoRequest(ArtilleryInfoRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.BuildingDataMap.TryGetValue(packet.BuildingId, out var building)) return;
+
+        SendProto((uint)InGamePacketType.ArtilleryInfoResponse, new ArtilleryInfoResponsePacket
+        {
+            BuildingId          = packet.BuildingId,
+            NormalMissileCount  = building.NormalMissileCount,
+            NuclearMissileCount = building.NuclearMissileCount,
+        }, clientEp);
+    }
+
     private void HandleInterceptFire(InterceptFirePacket packet)
     {
-        if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
-        if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
-
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.OwnerId, out var unit)) return;
+        if(!inGameData.BuildingDataMap.TryGetValue(packet.BuildingId, out var building)) return;
+        if (building.BuildingType != ItemName.Artillery) return;
+        switch ((ItemName)packet.MissileType)
+        {
+            case ItemName.NormalMissile:
+                if (building.NormalMissileCount <= 0) return;
+                building.NormalMissileCount--;
+                break;
+            case ItemName.NuclearMissile:
+                if (building.NuclearMissileCount <= 0) return;
+                building.NuclearMissileCount--;
+                break;
+            default: return;
+        }
+        
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.InterceptFire, packet);
         inGameData.Broadcast(_socket, buf);
     }
 
-    // ─────────────────────────────────────────────────────────────
+    #endregion
+
     #region NPC
 
     private const float NpcChaseRange     = 15f;
@@ -1112,7 +1169,7 @@ public class InGameServer
             if (kv.Value.IsAlive) alive++;
         if (alive >= MaxNpcsPerField) return;
 
-        int   npcId = inGameData.NextNpcId();
+        int   npcId = inGameData.NextNpcId() + 1000;
         // TODO: 스폰 위치 추후 변경 예정 (맵 스폰 포인트 지정 방식으로 교체)
         float angle  = (float)(_rng.NextDouble() * Math.PI * 2);
         float radius = 15f + (float)(_rng.NextDouble() * 30f);

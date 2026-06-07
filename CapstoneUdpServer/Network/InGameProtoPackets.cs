@@ -4,7 +4,7 @@ using ProtoBuf;
 
 namespace CapstoneUdpServer.Network
 {
-    public enum UnitType { Player, MovingUnit, Building, Environment }
+    public enum UnitType { Player, MovingUnit, Building, Environment, Missile }
     public enum AnimTriggerType { Jump = 0, ThrowGrenade = 1, Hit = 2, Shot = 3 }
 
     [ProtoContract]
@@ -22,7 +22,7 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(8)] public bool IsRunning;
         [ProtoMember(9)] public bool IsCrouching;
 
-        [ProtoMember(11)] public WeaponType WeaponIndex;
+        [ProtoMember(11)] public ItemName WeaponIndex;
         [ProtoMember(12)] public float DeltaTime;
 
         [ProtoMember(13)] public float PosX;
@@ -57,7 +57,7 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(7)] public float VelY;
         [ProtoMember(8)] public float VelZ;
         [ProtoMember(9)] public float RotationY;
-        [ProtoMember(11)] public WeaponType WeaponIndex;
+        [ProtoMember(11)] public ItemName WeaponIndex;
         [ProtoMember(12)] public float CameraPitch;
         [ProtoMember(13)] public bool IsCrouching;
         [ProtoMember(14)] public float MoveX;
@@ -190,10 +190,9 @@ namespace CapstoneUdpServer.Network
     public class MissileLoadRequestPacket
     {
         [ProtoMember(1)] public int PlayerId;
-        [ProtoMember(2)] public int BuildingId;
-        [ProtoMember(3)] public int MissileId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int BuildingId;
         [ProtoMember(4)] public int MissileType;
-        [ProtoMember(5)] public bool IsLoaded;
     }
 
     [ProtoContract]
@@ -201,11 +200,9 @@ namespace CapstoneUdpServer.Network
     {
         [ProtoMember(1)] public int PlayerId;
         [ProtoMember(2)] public int BuildingId;
-        [ProtoMember(3)] public int MissileId;
-        [ProtoMember(4)] public int MissileType;
-        [ProtoMember(5)] public bool IsLoaded;
-        [ProtoMember(6)] public bool Success;
-        [ProtoMember(7)] public int RemainingMissileCount;
+        [ProtoMember(3)] public int MissileType;
+        [ProtoMember(4)] public int LoadedNormalMissileAmount;
+        [ProtoMember(5)] public int LoadedNuclearMissileAmount;
     }
 
     [ProtoContract]
@@ -484,9 +481,9 @@ namespace CapstoneUdpServer.Network
     {
         [ProtoMember(1)] public int OwnerId;
         [ProtoMember(2)] public int FieldId;
-        [ProtoMember(3)] public int BuildingId;
-        [ProtoMember(4)] public int TargetNetworkId;
-        [ProtoMember(5)] public int TargetType;
+        [ProtoMember(3)] public int TargetNetworkId;
+        [ProtoMember(4)] public int TargetType;
+        [ProtoMember(5)] public int BuildingId;
     }
 
     [ProtoContract]
@@ -501,18 +498,22 @@ namespace CapstoneUdpServer.Network
     public class InterceptRotationPacket
     {
         [ProtoMember(1)] public int   OwnerId;
-        [ProtoMember(2)] public int   BuildingId;
-        [ProtoMember(3)] public float AimRotY;
-        [ProtoMember(4)] public float AimPitch;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public int   BuildingId;
+        [ProtoMember(4)] public float AimRotY;
     }
 
+    /// <summary>IsMine Controller가 조준 딜레이 후 전체 브로드캐스트 → 모든 클라 Launch</summary>
     [ProtoContract]
     public class InterceptFirePacket
     {
         [ProtoMember(1)] public int OwnerId;
-        [ProtoMember(2)] public int BuildingId;
-        [ProtoMember(3)] public int TargetNetworkId;
-        [ProtoMember(4)] public int TargetType;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int BuildingId;
+        [ProtoMember(4)] public int TargetNetworkId;
+        [ProtoMember(5)] public int TargetType;
+        [ProtoMember(6)] public int LaunchSpotIdx;
+        [ProtoMember(7)] public int MissileType;
     }
 
     // ── 새 피격 / 사망 시스템 ────────────────────────────────────────────
@@ -540,5 +541,28 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(2)] public int TargetType;  // HitTargetType
         [ProtoMember(3)] public int AttackerId;
         [ProtoMember(4)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class ExceptionPacket
+    {
+        [ProtoMember(1)] public string ErrorMessage;
+    }
+
+
+    [ProtoContract]
+    public class ArtilleryInfoRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int BuildingId;
+    }
+
+    [ProtoContract]
+    public class ArtilleryInfoResponsePacket
+    {
+        [ProtoMember(1)] public int BuildingId;
+        [ProtoMember(2)] public int NormalMissileCount;
+        [ProtoMember(3)] public int NuclearMissileCount;
     }
 }

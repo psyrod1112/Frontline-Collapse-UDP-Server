@@ -103,6 +103,10 @@ public enum InGamePacketType
     InterceptTargetEvent,
     InterceptRotation,
     InterceptFire,
+    ExceptionResponse,
+    CurrentWeaponDestroy,
+    ArtilleryInfoRequest,
+    ArtilleryInfoResponse,
 }
 
 #region 로비 패킷

@@ -118,7 +118,9 @@ public class PlayerUnitData
                 _finalBuildingCurrentHp = 0;
         }
     }
-    
+
+    public int CurrentSlotIndex { get; set; }
+
     public ConcurrentDictionary<ItemName, ItemData> Inventory = new();
 
     public PlayerUnitData(PlayerData playerData, int fieldId)
@@ -134,6 +136,7 @@ public class PlayerUnitData
         Shortcut3           = ItemName.None;
         Shortcut4           = ItemName.None;
         CurrentGrippingItem = Shortcut1;
+        CurrentSlotIndex = 0;
 
         MaxHp     = 100f;
         CurrentHp = 100f;
@@ -183,9 +186,27 @@ public class PlayerUnitData
             });
     }
 
+    public bool RemoveInventory(ItemName itemName)
+    {
+        Inventory[itemName].Amount--;
+        if (Inventory[itemName].Amount <= 0)
+        {
+            Inventory.TryRemove(itemName, out _);
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool HasItemInventory(ItemName itemName)
+    {
+        return Inventory.ContainsKey(itemName) && Inventory[itemName].Amount >= 1;
+    }
+
     // index: 0-based (0~3)
     public ItemName SetAndReturnGrippingItem(int index)
     {
+        CurrentSlotIndex = index;
         switch (index)
         {
             case 0: CurrentGrippingItem = Shortcut1; break;
