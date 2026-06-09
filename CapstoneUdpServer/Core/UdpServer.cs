@@ -94,14 +94,13 @@ public class UdpServer : IDisposable
         _workerThreads = new Thread[WORKER_THREAD_COUNT];
         for (int i = 0; i < WORKER_THREAD_COUNT; i++)
         {
-            int id = i;
-            _workerThreads[i] = new Thread(() => WorkerLoop(id)) { IsBackground = true };
+            _workerThreads[i] = new Thread(WorkerLoop) { IsBackground = true };
             _workerThreads[i].Start();
         }
         Console.WriteLine($"[UdpServer] 워커 스레드 {WORKER_THREAD_COUNT}개 실행 중");
     }
 
-    private void WorkerLoop(int threadId)
+    private void WorkerLoop()
     {
         while (_isRunning)
             _jobQueue.Dequeue().Execute();

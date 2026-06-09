@@ -54,8 +54,11 @@ public enum InGamePacketType
     MoveConfirm,
     RemotePlayerState,
     
-    NpcState,
+    NpcInterpolate,
     NpcChaseEvent,
+    NpcFightEnter,
+    NpcFightExit,
+    NpcFireEvent,
 
     SpawnNpc,
 
@@ -107,6 +110,14 @@ public enum InGamePacketType
     CurrentWeaponDestroy,
     ArtilleryInfoRequest,
     ArtilleryInfoResponse,
+
+    AttackBuildingRotate,
+    AttackBuildingFire,
+
+    TimerRequest,
+    TimerResponse,
+
+    BuildingBtnUpdate
 }
 
 #region 로비 패킷

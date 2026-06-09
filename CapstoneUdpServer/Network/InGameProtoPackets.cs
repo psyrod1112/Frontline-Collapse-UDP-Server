@@ -4,9 +4,6 @@ using ProtoBuf;
 
 namespace CapstoneUdpServer.Network
 {
-    public enum UnitType { Player, MovingUnit, Building, Environment, Missile }
-    public enum AnimTriggerType { Jump = 0, ThrowGrenade = 1, Hit = 2, Shot = 3 }
-
     [ProtoContract]
     public class PlayerInputPacket
     {
@@ -90,17 +87,41 @@ namespace CapstoneUdpServer.Network
     }
 
     [ProtoContract]
-    public class NpcStatePacket
+    public class NpcInterpolatePacket
     {
-        [ProtoMember(1)]  public uint            Tick;
+        [ProtoMember(1)]  public int            ArriveCornerIdx;
         [ProtoMember(2)]  public int             NpcId;
-        [ProtoMember(3)]  public float           PosX;
-        [ProtoMember(4)]  public float           PosY;
-        [ProtoMember(5)]  public float           PosZ;
-        [ProtoMember(6)]  public float           RotY;
-        [ProtoMember(7)]  public float           VelX;
-        [ProtoMember(8)]  public float           VelZ;
-        [ProtoMember(9)]  public float           CurrentHp;
+        [ProtoMember(3)]  public int FieldId;
+        [ProtoMember(4)]  public float           PosX;
+        [ProtoMember(5)]  public float           PosY;
+        [ProtoMember(6)]  public float           PosZ;
+        [ProtoMember(7)]  public float           RotY;
+    }
+
+    [ProtoContract]
+    public class NpcFireEventPacket
+    {
+        [ProtoMember(1)] public int   NpcId;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public float DirX;
+        [ProtoMember(4)] public float DirY;
+        [ProtoMember(5)] public float DirZ;
+    }
+
+    [ProtoContract]
+    public class NpcFightEnterPacket
+    {
+        [ProtoMember(1)] public int NpcId;
+        [ProtoMember(2)] public int PlayerId;
+        [ProtoMember(3)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class NpcFightExitPacket
+    {
+        [ProtoMember(1)] public int NpcId;
+        [ProtoMember(2)] public int PlayerId;
+        [ProtoMember(3)] public int FieldId;
     }
 
     [ProtoContract]
@@ -115,11 +136,9 @@ namespace CapstoneUdpServer.Network
     public class SpawnNpcPacket
     {
         [ProtoMember(1)] public int   NpcId;
-        [ProtoMember(2)] public float PosX;
-        [ProtoMember(3)] public float PosY;
-        [ProtoMember(4)] public float PosZ;
-        [ProtoMember(5)] public int   NpcType;
-        [ProtoMember(6)] public float MaxHp;
+        [ProtoMember(2)] public int SpawnPoint;
+        [ProtoMember(3)] public int   NpcType;
+        [ProtoMember(4)] public float MaxHp;
     }
 
     [ProtoContract]
@@ -184,6 +203,15 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(1)] public int BuildingId;
         [ProtoMember(2)] public int BuildingType;
         [ProtoMember(3)] public int DestroyerId;
+    }
+    
+    [ProtoContract]
+    public class BuildingBtnUpdatePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int ItemName;
+        [ProtoMember(4)] public int Amount;
     }
 
     [ProtoContract]
@@ -564,5 +592,40 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(1)] public int BuildingId;
         [ProtoMember(2)] public int NormalMissileCount;
         [ProtoMember(3)] public int NuclearMissileCount;
+    }
+
+    [ProtoContract]
+    public class AttackBuildingRotatePacket
+    {
+        [ProtoMember(1)] public int   OwnerId;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public int   BuildingId;
+        [ProtoMember(4)] public float AimRotY;
+    }
+
+    [ProtoContract]
+    public class AttackBuildingFirePacket
+    {
+        [ProtoMember(1)] public int   OwnerId;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public int   BuildingId;
+        [ProtoMember(4)] public int   MuzzleIdx;
+        [ProtoMember(5)] public float DirX;
+        [ProtoMember(6)] public float DirY;
+        [ProtoMember(7)] public float DirZ;
+    }
+
+    [ProtoContract]
+    public class TimerRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+    }
+
+    [ProtoContract]
+    public class TimerResponsePacket
+    {
+        [ProtoMember(1)] public int Min;
+        [ProtoMember(2)] public int Sec;
     }
 }

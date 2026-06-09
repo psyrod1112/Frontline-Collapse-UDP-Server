@@ -35,6 +35,10 @@ public enum ItemName
     Shell
 }
 
+public enum UnitType { Player, Npc, Boss, Building, Environment,
+    Missile
+}
+public enum AnimTriggerType { Jump = 0, ThrowGrenade = 1, Hit = 2, Shot = 3 }
 
 
 public class BuildingStat
@@ -51,19 +55,22 @@ public static class CombatData
         [ItemName.Artillery]  = new BuildingStat { MaxHp = 500f, Defense = 30 },
         [ItemName.GyunInPo]   = new BuildingStat { MaxHp = 500f, Defense = 30 },
         [ItemName.Turret]     = new BuildingStat { MaxHp = 420f, Defense = 35 },
-        [ItemName.CheckPoint] = new BuildingStat { MaxHp = 800f, Defense = 70 },
+        [ItemName.CheckPoint] = new BuildingStat { MaxHp = 800f, Defense = 40 },
     };
 
     private static readonly Dictionary<ItemName, int> ItemDamageMap = new()
     {
-        [ItemName.Rifle_Normal]    = 20,
-        [ItemName.Rifle_HK416]    = 25,
+        [ItemName.Rifle_Normal]    = 50,
+        [ItemName.Rifle_HK416]    = 70,
         [ItemName.Sniper_Normal]   = 65,
         [ItemName.Sniper_Barret]   = 80,
         [ItemName.NormalGrenade]   = 90,
-        [ItemName.Bazuka]          = 70,
-        [ItemName.NormalMissile]   = 180,
-        [ItemName.NuclearMissile]  = 400,
+        [ItemName.Bazuka]          = 120,
+        [ItemName.NormalMissile]   = 450,
+        [ItemName.NuclearMissile]  = 3500,
+        [ItemName.Bullet]          = 60,
+        [ItemName.Shell]           = 120,
+        [ItemName.AirPlane]        = 200,
     };
 
     public static int GetDamageByItemName(ItemName itemName) =>
@@ -75,6 +82,29 @@ public static class CombatData
     }
 }
 
+
+public class KillReward
+{
+    public int Gold { get; set; }
+    public int Exp  { get; set; }
+}
+
+public static class RewardData
+{
+    public static readonly KillReward NpcKillReward    = new() { Gold = 100, Exp = 100 };
+    public static readonly KillReward PlayerKillReward = new() { Gold = 200, Exp = 200 };
+
+    private static readonly Dictionary<ItemName, KillReward> BuildingKillRewards = new()
+    {
+        [ItemName.Turret]     = new KillReward { Gold = 100, Exp =  80 },
+        [ItemName.Artillery]  = new KillReward { Gold = 150, Exp = 100 },
+        [ItemName.GyunInPo]   = new KillReward { Gold = 120, Exp =  80 },
+        [ItemName.CheckPoint] = new KillReward { Gold = 300, Exp = 200 },
+    };
+
+    public static KillReward GetBuildingReward(ItemName type) =>
+        BuildingKillRewards.TryGetValue(type, out var r) ? r : new KillReward { Gold = 50, Exp = 30 };
+}
 
 public class ItemData
 {

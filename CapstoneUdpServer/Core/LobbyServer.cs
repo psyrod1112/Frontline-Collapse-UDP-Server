@@ -45,9 +45,9 @@ public class LobbyServer : IDisposable
     {
         int[][] positions = new int[4][];
         positions[0] = new[] {  -250, 10,  -250, 0 };
-        positions[1] = new[] {  250, 10,  250,  0 };
-        positions[2] = new[] {  200, 2,  550, 0 };
-        positions[3] = new[] {  550, 2,  200, 0 };
+        positions[1] = new[] {  -250, 10,  -250, 0 };
+        positions[2] = new[] {  -250, 10,  -250, 0 };
+        positions[3] = new[] {  -250, 10,  -250, 0 };
         return positions;
     }
 
@@ -337,7 +337,7 @@ public class LobbyServer : IDisposable
             Console.WriteLine($"[LobbyServer] {p.PlayerName} 로비 → 인게임 pool 이동");
         }
 
-        var newInGameData = new InGameData();
+        var newInGameData = new InGameData(_socket);
         var spawnPos = PlayerSpawnPos();
         int playerIdx = 0;
         foreach (var p in roomData.InRoomPlayers.Values)
@@ -389,7 +389,6 @@ public class LobbyServer : IDisposable
         }
         
         _inGameDataList[roomData.RoomId] = newInGameData;
-        _inGameServer?.StartNpcLoop(roomData.RoomId, newInGameData);
 
         BroadcastDestroyRoom(new RoomPacket
         {

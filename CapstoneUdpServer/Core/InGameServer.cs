@@ -1,12 +1,9 @@
-using System;
+
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using CapstoneUdpServer.Data;
 using CapstoneUdpServer.Network;
 
@@ -20,10 +17,10 @@ public class InGameServer
     private volatile bool                                   _running = true;
 
     private static readonly Random _rng                = new();
-    private const int              MaxNpcsPerField     = 40;
-    private const float            NpcMoveSpeed        = 2f;
-    private const float            NpcSpawnInterval    = 5f;
-    private const float            NpcBroadcastInterval = 0.2f;
+    private const float            NpcSpawnInterval    = 10f;
+    private int                    _missileIdCounter   = 20000;
+
+    
 
     public InGameServer(
         Socket socket,
@@ -129,11 +126,15 @@ public class InGameServer
                     var wcPacket = ProtobufSerializer.Deserialize<WeaponChangePacket>(buffer);
                     HandleWeaponChange(wcPacket);
                     break;
+                case (uint)InGamePacketType.TimerRequest:
+                    var timerRequestPacket = ProtobufSerializer.Deserialize<TimerRequestPacket>(buffer);
+                    HandleTimerRequest(timerRequestPacket, clientEp);
+                    break;
 
                 // ── 건물 ──────────────────────────────────────────────────────────
                 case (uint)InGamePacketType.BuildingPlace:
                     var buildingPlacePacket = ProtobufSerializer.Deserialize<BuildingPlacePacket>(buffer);
-                    HandleBuildingPlace(buildingPlacePacket);
+                    HandleBuildingPlace(buildingPlacePacket, clientEp);
                     break;
                 case (uint)InGamePacketType.BuildingBtnRequest:
                     var buildingBtnRequestPacket = ProtobufSerializer.Deserialize<BuildingBtnRequestpacket>(buffer);
@@ -143,7 +144,6 @@ public class InGameServer
                     var artilleryInfoPacket = ProtobufSerializer.Deserialize<ArtilleryInfoRequestPacket>(buffer);
                     HandleArtilleryInfoRequest(artilleryInfoPacket, clientEp);
                     break;
-
                 // ── 미사일포 (Intercept System) ────────────────────────────────────
                 case (uint)InGamePacketType.MissileLoadRequest:
                     var mlPacket = ProtobufSerializer.Deserialize<MissileLoadRequestPacket>(buffer);
@@ -165,9 +165,98 @@ public class InGameServer
                     var interceptFirePacket = ProtobufSerializer.Deserialize<InterceptFirePacket>(buffer);
                     HandleInterceptFire(interceptFirePacket);
                     break;
+                case (uint)InGamePacketType.AttackBuildingRotate:
+                    var attackRotatePacket = ProtobufSerializer.Deserialize<AttackBuildingRotatePacket>(buffer);
+                    HandleAttackBuildingRotate(attackRotatePacket);
+                    break;
+                case (uint)InGamePacketType.AttackBuildingFire:
+                    var attackFirePacket = ProtobufSerializer.Deserialize<AttackBuildingFirePacket>(buffer);
+                    HandleAttackBuildingFire(attackFirePacket);
+                    break;
+                case (uint)InGamePacketType.NpcInterpolate:
+                    var npcInterpolatePacket = ProtobufSerializer.Deserialize<NpcInterpolatePacket>(buffer);
+                    HandleNpcInterpolate(npcInterpolatePacket);
+                    break;
+                case (uint)InGamePacketType.NpcFightEnter:
+                    var npcFightEnterPacket = ProtobufSerializer.Deserialize<NpcFightEnterPacket>(buffer);
+                    HandleNpcFightEnter(npcFightEnterPacket);
+                    break;
+                case (uint)InGamePacketType.NpcFightExit:
+                    var npcFightExitPacket = ProtobufSerializer.Deserialize<NpcFightExitPacket>(buffer);
+                    HandleNpcFightExit(npcFightExitPacket);
+                    break;
+                case (uint)InGamePacketType.NpcFireEvent:
+                    var npcFireEventPacket = ProtobufSerializer.Deserialize<NpcFireEventPacket>(buffer);
+                    HandleNpcFireEvent(npcFireEventPacket);
+                    break;
             }
         }
+
+    }
+
+    private void HandleTimerRequest(TimerRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+
+        var (min, sec) = inGameData.GetElapsedTime();
         
+        SendProto((uint)InGamePacketType.TimerResponse, new TimerResponsePacket
+        {
+            Min = min,
+            Sec = sec
+        }, clientEp);
+    }
+
+    private void HandleAttackBuildingRotate(AttackBuildingRotatePacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.AttackBuildingRotate, packet);
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleAttackBuildingFire(AttackBuildingFirePacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.AttackBuildingFire, packet);
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleNpcInterpolate(NpcInterpolatePacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.NpcMap.TryGetValue(packet.NpcId, out var npcUnit)) return;
+
+        if (npcUnit.LastCornerIdx == packet.ArriveCornerIdx) return; // 중복 무시
+        npcUnit.LastCornerIdx = packet.ArriveCornerIdx;
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcInterpolate,
+            packet);
+        inGameData.Broadcast(_socket, buf); // 최초 1회만 브로드캐스트
+    }
+
+    private void HandleNpcFightEnter(NpcFightEnterPacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.NpcMap.TryGetValue(packet.NpcId, out var npcUnit)) return;
+        npcUnit.Fighting = true;
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcFightEnter, packet);
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleNpcFightExit(NpcFightExitPacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.NpcMap.TryGetValue(packet.NpcId, out var npcUnit)) return;
+        npcUnit.Fighting = false;
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcFightExit, packet);
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleNpcFireEvent(NpcFireEventPacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcFireEvent, packet);
+        inGameData.Broadcast(_socket, buf);
     }
 
     #region 플레이어 이동/상태
@@ -203,18 +292,28 @@ public class InGameServer
 
     #region 건물
 
-    private void HandleBuildingPlace(BuildingPlacePacket packet)
+    private void HandleBuildingPlace(BuildingPlacePacket packet,IPEndPoint clientEp)
     {
         if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
-        if (!inGameData.PlayerUnitDataMap.ContainsKey(packet.OwnerId)) return;
-
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.OwnerId, out var unit)) return;
         // 서버에서 고유 BuildingId 발급
         packet.BuildingId = inGameData.NextBuildingId() + 10000;
 
         var itemName = (ItemName)packet.BuildingType;
         var stat     = CombatData.GetBuildingStat(itemName);
 
+        int amount = 0;
+        if(!unit.RemoveInventory(itemName)) amount = unit.Inventory[itemName].Amount;
+        
+        SendProto((uint)InGamePacketType.BuildingBtnUpdate, new BuildingBtnUpdatePacket
+        {
+            PlayerId = packet.OwnerId,
+            ItemName = (int)itemName,
+            Amount = amount,
+            
+        }, clientEp);
+        
         inGameData.BuildingDataMap[packet.BuildingId] = new BuildingData
         {
             BuildingId   = packet.BuildingId,
@@ -316,16 +415,28 @@ public class InGameServer
     {
         if (!_store.TryGetInGame(packet.OwnerId, out var playerData)) return;
         if (!_inGameDataList.TryGetValue(playerData.FieldId, out var inGameData)) return;
+        if (!inGameData.BuildingDataMap.TryGetValue(packet.BuildingId, out var building)) return;
 
-        // if (inGameData.TryGetBuilding(packet.BuildingId, out var building, out _) && building != null)
-        // {
-        //     building.IsMissileLoaded = false;
-        //     building.LoadedMissileId = 0;
-        //     building.LoadedMissileType = WeaponType.None;
-        // }
-        //
-        // byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.MissileLaunch, packet);
-        // inGameData.Broadcast(_socket, buf, excludePlayerId: packet.OwnerId);
+        var missileType = (ItemName)packet.MissileType;
+        switch (missileType)
+        {
+            case ItemName.NormalMissile:
+                if (building.NormalMissileCount <= 0) return;
+                building.NormalMissileCount--;
+                break;
+            case ItemName.NuclearMissile:
+                if (building.NuclearMissileCount <= 0) return;
+                building.NuclearMissileCount--;
+                break;
+            default:
+                return;
+        }
+
+        packet.MissileId = _missileIdCounter++;
+        Console.WriteLine($"[MissileLaunch] id={packet.MissileId} type={missileType} owner={packet.OwnerId} building={packet.BuildingId}");
+
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.MissileLaunch, packet);
+        inGameData.Broadcast(_socket, buf);
     }
 
     private void HandleMissileHitRequest(MissileHitRequestPacket packet)
@@ -357,33 +468,31 @@ public class InGameServer
 
         if (targetType == UnitType.Building)
         {
-            //if (!inGameData.TryGetBuilding(targetId, out var building, out _) || building == null) return;
-
-            // int defense = CombatData.GetBuildingStat((ItemName)building.PrefabIndex).Defense;
-            // finalDamage = Math.Max(1, rawDamage - defense);
-            // building.CurrentHp = Math.Max(0f, building.CurrentHp - finalDamage);
-            // currentHp = building.CurrentHp;
-            // maxHp = building.MaxHp;
+            if (!inGameData.BuildingDataMap.TryGetValue(targetId, out var building)) return;
+            var stat           = CombatData.GetBuildingStat(building.BuildingType);
+            finalDamage        = Math.Max(1, rawDamage - stat.Defense);
+            building.CurrentHp = Math.Max(0f, building.CurrentHp - finalDamage);
+            currentHp          = building.CurrentHp;
+            maxHp              = building.MaxHp;
         }
         else
         {
             if (!inGameData.PlayerUnitDataMap.TryGetValue(targetId, out var unit)) return;
-
-            int defense = targetType == UnitType.Player ? 5 : 10;
-            finalDamage = Math.Max(1, rawDamage - defense);
+            int defense    = targetType == UnitType.Player ? 5 : 10;
+            finalDamage    = Math.Max(1, rawDamage - defense);
             unit.CurrentHp = Math.Max(0f, unit.CurrentHp - finalDamage);
-            currentHp = unit.CurrentHp;
-            maxHp = unit.MaxHp;
+            currentHp      = unit.CurrentHp;
+            maxHp          = unit.MaxHp;
         }
 
         BroadcastDamageResult(inGameData, new DamageResultPacket
         {
-            // AttackerId = attackerId,
-            // TargetId = targetId,
-            // TargetType = targetTypeValue,
-            // Damage = finalDamage,
-            // CurrentHp = currentHp,
-            // MaxHp = maxHp,
+            AttackerId = attackerId,
+            TargetId   = targetId,
+            TargetType = targetTypeValue,
+            Damage     = finalDamage,
+            CurrentHp  = currentHp,
+            MaxHp      = maxHp,
         });
     }
 
@@ -417,12 +526,16 @@ public class InGameServer
     private void HandleHitRequest(HitRequestPacket packet)
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
-        if(!inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var attackerData)) return;
-        if (attackerData.CurrentGrippingItem != (ItemName)packet.WeaponItemName)
+
+        bool isNpcAttacker = inGameData.NpcMap.ContainsKey(packet.AttackerId);
+        if (!isNpcAttacker)
         {
-            Console.WriteLine("서버에서 들고있는 무기랑 클라의 무기랑 다른 것 같음!");
-            //TODO: 에러 메시지 띄우기
-            return;
+            if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var attackerData)) return;
+            if (attackerData.CurrentGrippingItem != (ItemName)packet.WeaponItemName)
+            {
+                Console.WriteLine("서버에서 들고있는 무기랑 클라의 무기랑 다른 것 같음!");
+                return;
+            }
         }
         
         var itemName   = (ItemName)packet.WeaponItemName;
@@ -434,7 +547,7 @@ public class InGameServer
 
         switch (targetType)
         {
-            case UnitType.MovingUnit:
+            case UnitType.Npc:
             {
                 if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc) || !npc.IsAlive) return;
                 finalDamage   = Math.Max(1, rawDamage);
@@ -496,7 +609,7 @@ public class InGameServer
 
         switch (targetType)
         {
-            case UnitType.MovingUnit:
+            case UnitType.Npc:
             {
                 if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc)) return;
                 if (!npc.IsAlive) return; // 이미 처리됨
@@ -509,22 +622,23 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)UnitType.MovingUnit,
+                        TargetType = (int)UnitType.Npc,
                         KillerId   = packet.AttackerId,
-                        GoldReward = 100,
+                        GoldReward = RewardData.NpcKillReward.Gold,
                     }));
 
                 if (packet.AttackerId != 0
                     && inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var npcKiller))
                 {
-                    npcKiller.Gold += 100;
-                    npcKiller.Exp  += 100;
+                    var npcReward = RewardData.NpcKillReward;
+                    npcKiller.Gold += npcReward.Gold;
+                    npcKiller.Exp  += npcReward.Exp;
                     npcKiller.CSCount++;
                     SendProto((uint)InGamePacketType.RewardUpdate, new RewardUpdatePacket
                     {
                         PlayerId    = npcKiller.PlayerId,
-                        GoldAmount  = 100,  TotalGold   = npcKiller.Gold,
-                        ExpAmount   = 100,  TotalExp    = npcKiller.Exp,
+                        GoldAmount  = npcReward.Gold,  TotalGold   = npcKiller.Gold,
+                        ExpAmount   = npcReward.Exp,   TotalExp    = npcKiller.Exp,
                         CSCount     = npcKiller.CSCount,
                         Level       = npcKiller.Level,
                         RequiredExp = npcKiller.RequiredExp,
@@ -550,7 +664,7 @@ public class InGameServer
                         TargetId   = packet.TargetId,
                         TargetType = (int)UnitType.Player,
                         KillerId   = packet.AttackerId,
-                        GoldReward = 200,
+                        GoldReward = RewardData.PlayerKillReward.Gold,
                     }));
 
                 SendProto((uint)InGamePacketType.DeathUpdate,
@@ -560,14 +674,15 @@ public class InGameServer
                 if (packet.AttackerId != 0
                     && inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var killer))
                 {
-                    killer.Gold += 200;
-                    killer.Exp  += 200;
+                    var playerReward = RewardData.PlayerKillReward;
+                    killer.Gold += playerReward.Gold;
+                    killer.Exp  += playerReward.Exp;
                     killer.KillCount++;
                     SendProto((uint)InGamePacketType.RewardUpdate, new RewardUpdatePacket
                     {
                         PlayerId    = killer.PlayerId,
-                        GoldAmount  = 200,  TotalGold   = killer.Gold,
-                        ExpAmount   = 200,  TotalExp    = killer.Exp,
+                        GoldAmount  = playerReward.Gold,  TotalGold   = killer.Gold,
+                        ExpAmount   = playerReward.Exp,   TotalExp    = killer.Exp,
                         KillCount   = killer.KillCount,
                         Level       = killer.Level,
                         RequiredExp = killer.RequiredExp,
@@ -582,8 +697,9 @@ public class InGameServer
                 if (!inGameData.BuildingDataMap.TryGetValue(packet.TargetId, out var building)) return;
                 if (building.CurrentHp > 0f) return; // 아직 살아있음
 
-                // 건물 제거
-                //inGameData.BuildingDataMap.TryRemove(packet.TargetId, out _);
+                inGameData.BuildingDataMap.TryRemove(packet.TargetId, out _);
+
+                var buildingReward = RewardData.GetBuildingReward(building.BuildingType);
 
                 inGameData.Broadcast(_socket, ProtobufSerializer.Serialize(
                     (uint)InGamePacketType.DeathEvent,
@@ -592,8 +708,23 @@ public class InGameServer
                         TargetId   = packet.TargetId,
                         TargetType = (int)UnitType.Building,
                         KillerId   = packet.AttackerId,
-                        GoldReward = 50,
+                        GoldReward = buildingReward.Gold,
                     }));
+
+                if (packet.AttackerId != 0
+                    && inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var buildingKiller))
+                {
+                    buildingKiller.Gold += buildingReward.Gold;
+                    buildingKiller.Exp  += buildingReward.Exp;
+                    SendProto((uint)InGamePacketType.RewardUpdate, new RewardUpdatePacket
+                    {
+                        PlayerId    = buildingKiller.PlayerId,
+                        GoldAmount  = buildingReward.Gold,  TotalGold   = buildingKiller.Gold,
+                        ExpAmount   = buildingReward.Exp,   TotalExp    = buildingKiller.Exp,
+                        Level       = buildingKiller.Level,
+                        RequiredExp = buildingKiller.RequiredExp,
+                    }, (IPEndPoint)buildingKiller.IpEndPoint);
+                }
 
                 Console.WriteLine($"[Death] Building buildingId={packet.TargetId} destroyed by player={packet.AttackerId}");
                 break;
@@ -676,7 +807,7 @@ public class InGameServer
         {
             
         }
-        else if (targetType == UnitType.MovingUnit)
+        else if (targetType == UnitType.Npc)
         {
             if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc) || !npc.IsAlive) return;
 
@@ -695,25 +826,26 @@ public class InGameServer
                     new DeathEventPacket
                     {
                         TargetId   = packet.TargetId,
-                        TargetType = (int)UnitType.MovingUnit,
+                        TargetType = (int)UnitType.Npc,
                         KillerId   = packet.AttackerId,
-                        GoldReward = 100,
+                        GoldReward = RewardData.NpcKillReward.Gold,
                     });
                 inGameData.Broadcast(_socket, deadBuf);
 
                 if (inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var npcKiller))
                 {
-                    npcKiller.Gold    += 100;
-                    npcKiller.Exp     += 100;
+                    var npcReward2 = RewardData.NpcKillReward;
+                    npcKiller.Gold    += npcReward2.Gold;
+                    npcKiller.Exp     += npcReward2.Exp;
                     npcKiller.CSCount++;
 
                     SendProto((uint)InGamePacketType.RewardUpdate,
                         new RewardUpdatePacket
                         {
                             PlayerId   = npcKiller.PlayerId,
-                            GoldAmount = 100,
+                            GoldAmount = npcReward2.Gold,
                             TotalGold  = npcKiller.Gold,
-                            ExpAmount   = 100,
+                            ExpAmount   = npcReward2.Exp,
                             TotalExp    = npcKiller.Exp,
                             CSCount     = npcKiller.CSCount,
                             Level       = npcKiller.Level,
@@ -743,7 +875,7 @@ public class InGameServer
                         TargetId   = packet.TargetId,
                         TargetType = (int)UnitType.Player,
                         KillerId   = packet.AttackerId,
-                        GoldReward = 200,
+                        GoldReward = RewardData.PlayerKillReward.Gold,
                     });
                 inGameData.Broadcast(_socket, deadBuf);
 
@@ -757,17 +889,18 @@ public class InGameServer
 
                 if (inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var playerKiller))
                 {
-                    playerKiller.Gold      += 200;
-                    playerKiller.Exp       += 200;
+                    var playerReward2 = RewardData.PlayerKillReward;
+                    playerKiller.Gold      += playerReward2.Gold;
+                    playerKiller.Exp       += playerReward2.Exp;
                     playerKiller.KillCount++;
 
                     SendProto((uint)InGamePacketType.RewardUpdate,
                         new RewardUpdatePacket
                         {
                             PlayerId   = playerKiller.PlayerId,
-                            GoldAmount = 200,
+                            GoldAmount = playerReward2.Gold,
                             TotalGold  = playerKiller.Gold,
-                            ExpAmount   = 200,
+                            ExpAmount   = playerReward2.Exp,
                             TotalExp    = playerKiller.Exp,
                             KillCount   = playerKiller.KillCount,
                             Level       = playerKiller.Level,
@@ -1052,9 +1185,8 @@ public class InGameServer
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
         if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
 
-        // 트리거 이벤트를 해당 필드의 다른 모든 플레이어에게 브로드캐스트
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.AnimTrigger, packet);
-        inGameData.Broadcast(_socket, buf, excludePlayerId: packet.PlayerId);
+        inGameData.Broadcast(_socket, buf);
     }
 
     private void HandleInterceptTargetRequest(InterceptTargetRequestPacket packet)
@@ -1116,203 +1248,6 @@ public class InGameServer
         
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.InterceptFire, packet);
         inGameData.Broadcast(_socket, buf);
-    }
-
-    #endregion
-
-    #region NPC
-
-    private const float NpcChaseRange     = 15f;
-    private const float NpcChaseExitRange = 20f;
-
-    public void StartNpcLoop(int fieldId, InGameData inGameData)
-    {
-        Task.Run(async () =>
-        {
-            float spawnTimer     = NpcSpawnInterval; // 첫 틱에 즉시 스폰 시도
-            float broadcastTimer = 0f;
-            var   lastTime       = DateTime.UtcNow;
-
-            while (_running)
-            {
-                await Task.Delay(100);
-
-                var   now = DateTime.UtcNow;
-                float dt  = (float)(now - lastTime).TotalSeconds;
-                lastTime  = now;
-
-                if (inGameData.PlayerUnitDataMap.IsEmpty) break;
-
-                spawnTimer     += dt;
-                broadcastTimer += dt;
-
-                if (spawnTimer >= NpcSpawnInterval)
-                {
-                    spawnTimer = 0f;
-                    TrySpawnNpc(fieldId, inGameData);
-                }
-
-                if (broadcastTimer >= NpcBroadcastInterval)
-                {
-                    broadcastTimer = 0f;
-                    TickAndBroadcastNpcs(inGameData, NpcBroadcastInterval);
-                }
-            }
-            Console.WriteLine($"[NPC] fieldId={fieldId} NPC 루프 종료");
-        });
-    }
-
-    private void TrySpawnNpc(int fieldId, InGameData inGameData)
-    {
-        int alive = 0;
-        foreach (var kv in inGameData.NpcMap)
-            if (kv.Value.IsAlive) alive++;
-        if (alive >= MaxNpcsPerField) return;
-
-        int   npcId = inGameData.NextNpcId() + 1000;
-        // TODO: 스폰 위치 추후 변경 예정 (맵 스폰 포인트 지정 방식으로 교체)
-        float angle  = (float)(_rng.NextDouble() * Math.PI * 2);
-        float radius = 15f + (float)(_rng.NextDouble() * 30f);
-        var   pos    = new System.Numerics.Vector3(
-            400f + (float)Math.Sin(angle) * radius,
-            2f,
-            400f + (float)Math.Cos(angle) * radius);
-
-        var npc = new NpcData { NpcId = npcId, NpcType = 0, Position = pos };
-        npc.PickNewDirection();
-        inGameData.NpcMap[npcId] = npc;
-
-        var buf = ProtobufSerializer.Serialize((uint)InGamePacketType.SpawnNpc, new SpawnNpcPacket
-        {
-            NpcId   = npcId,
-            PosX    = pos.X,
-            PosY    = pos.Y,
-            PosZ    = pos.Z,
-            NpcType = 0,
-            MaxHp   = npc.MaxHp,
-        });
-        inGameData.Broadcast(_socket, buf);
-        Console.WriteLine($"[NPC] 스폰 NpcId={npcId}, fieldId={fieldId}, alive={alive + 1}");
-    }
-
-    private void TickAndBroadcastNpcs(InGameData inGameData, float dt)
-    {
-        uint tick = (uint)(Environment.TickCount64 / 100);
-
-        foreach (var kv in inGameData.NpcMap)
-        {
-            var npc = kv.Value;
-            if (!npc.IsAlive) continue;
-
-            var prevPos = npc.Position;
-            UpdateNpcChaseState(npc, inGameData);
-            MoveNpc(npc, dt);
-
-            // 위치 변화 없으면 패킷 전송 스킵
-            if ((npc.Position - prevPos).LengthSquared() < 0.0001f) continue;
-
-            var buf = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcState, new NpcStatePacket
-            {
-                Tick      = tick,
-                NpcId     = npc.NpcId,
-                PosX      = npc.Position.X,
-                PosY      = npc.Position.Y,
-                PosZ      = npc.Position.Z,
-                RotY      = npc.RotY,
-                VelX      = npc.MoveDir.X * NpcMoveSpeed,
-                VelZ      = npc.MoveDir.Z * NpcMoveSpeed,
-            });
-            inGameData.Broadcast(_socket, buf);
-        }
-    }
-
-    private void UpdateNpcChaseState(NpcData npc, InGameData inGameData)
-    {
-        if (npc.IsChasing)
-        {
-            bool targetGone = !inGameData.PlayerUnitDataMap.TryGetValue(npc.ChaseTargetId, out var target)
-                              || DistanceSq(npc.Position, target.Position) > NpcChaseExitRange * NpcChaseExitRange;
-
-            if (targetGone)
-            {
-                npc.IsChasing     = false;
-                npc.ChaseTargetId = 0;
-                npc.PickNewDirection();
-
-                var evt = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcChaseEvent,
-                    new NpcChaseEventPacket { NpcId = npc.NpcId, TargetPlayerId = 0, IsChasing = false });
-                inGameData.Broadcast(_socket, evt);
-            }
-            else
-            {
-                var delta = target.Position - npc.Position;
-                if (delta.LengthSquared() > 0.01f)
-                {
-                    var dir  = System.Numerics.Vector3.Normalize(delta);
-                    npc.MoveDir = new System.Numerics.Vector3(dir.X, 0, dir.Z);
-                    npc.RotY    = (float)(Math.Atan2(dir.X, dir.Z) * (180.0 / Math.PI));
-                }
-            }
-        }
-        else
-        {
-            int   nearestId     = 0;
-            float nearestDistSq = NpcChaseRange * NpcChaseRange;
-
-            foreach (var kv in inGameData.PlayerUnitDataMap)
-            {
-                float dSq = DistanceSq(npc.Position, kv.Value.Position);
-                if (dSq < nearestDistSq)
-                {
-                    nearestDistSq = dSq;
-                    nearestId     = kv.Key;
-                }
-            }
-
-            if (nearestId != 0)
-            {
-                npc.IsChasing     = true;
-                npc.ChaseTargetId = nearestId;
-
-                var evt = ProtobufSerializer.Serialize((uint)InGamePacketType.NpcChaseEvent,
-                    new NpcChaseEventPacket { NpcId = npc.NpcId, TargetPlayerId = nearestId, IsChasing = true });
-                inGameData.Broadcast(_socket, evt);
-            }
-        }
-    }
-
-    private void MoveNpc(NpcData npc, float dt)
-    {
-        const float bound = 80f;
-
-        if (!npc.IsChasing)
-        {
-            npc.DirTimer -= dt;
-            if (npc.DirTimer <= 0f)
-            {
-                npc.DirTimer = float.MaxValue;
-                npc.MoveDir  = System.Numerics.Vector3.Zero;
-                _ = Task.Run(async () => { await Task.Delay(3000); npc.PickNewDirection(); });
-                return;
-            }
-        }
-
-        var newPos = npc.Position + npc.MoveDir * NpcMoveSpeed * dt;
-        if (Math.Abs(newPos.X) > bound || Math.Abs(newPos.Z) > bound)
-        {
-            npc.PickNewDirection();
-            npc.Position = new System.Numerics.Vector3(
-                Math.Clamp(newPos.X, -bound, bound), newPos.Y,
-                Math.Clamp(newPos.Z, -bound, bound));
-            return;
-        }
-        npc.Position = newPos;
-    }
-
-    private static float DistanceSq(System.Numerics.Vector3 a, System.Numerics.Vector3 b)
-    {
-        float dx = a.X - b.X, dz = a.Z - b.Z;
-        return dx * dx + dz * dz;
     }
 
     #endregion
