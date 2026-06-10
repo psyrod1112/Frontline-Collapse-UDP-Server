@@ -45,9 +45,9 @@ public class LobbyServer : IDisposable
     {
         int[][] positions = new int[4][];
         positions[0] = new[] {  -250, 10,  -250, 0 };
-        positions[1] = new[] {  -250, 10,  -250, 0 };
+        positions[1] = new[] {  250, 10,  250, 0 };
         positions[2] = new[] {  -250, 10,  -250, 0 };
-        positions[3] = new[] {  -250, 10,  -250, 0 };
+        positions[3] = new[] {  250, 10,  250, 0 };
         return positions;
     }
 

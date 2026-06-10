@@ -129,7 +129,7 @@ public class PlayerUnitData
         _playerData = playerData;
         _playerData.SetFieldId(fieldId);
 
-        Gold = 100000;
+        Gold = 99999;
         Level = 1;
         Exp = 0;
         Shortcut1           = ItemName.Rifle_Normal;
@@ -151,8 +151,8 @@ public class PlayerUnitData
         KillCount = 0;
         DeathCount = 0;
         CSCount = 0;
-        GuidedMissileCount = 3;
-        NukeMissileCount = 1;
+        GuidedMissileCount = 0;
+        NukeMissileCount = 0;
         HotkeyIndex = 0; // 0-based
 
 
