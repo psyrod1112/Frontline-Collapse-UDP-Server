@@ -44,8 +44,8 @@ public class LobbyServer : IDisposable
     public int[][] PlayerSpawnPos()
     {
         int[][] positions = new int[4][];
-        positions[0] = new[] {  -250, 10,  -250, 0 };
-        positions[1] = new[] {  250, 10,  250, 0 };
+        positions[0] = new[] {  -260, 10,  -260, 0 };
+        positions[1] = new[] {  260, 10,  260, 0 };
         positions[2] = new[] {  -250, 10,  -250, 0 };
         positions[3] = new[] {  250, 10,  250, 0 };
         return positions;
