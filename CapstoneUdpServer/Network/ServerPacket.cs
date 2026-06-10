@@ -117,7 +117,19 @@ public enum InGamePacketType
     TimerRequest,
     TimerResponse,
 
-    BuildingBtnUpdate
+    BuildingBtnUpdate,
+
+    HealRequest,
+    HealResponse,
+
+    CaptureRequest,
+    CaptureResponse,
+    CaptureCastingEvent,
+
+    AreaAttackEffect,
+
+    CoreInitRequest,
+    GameOverEvent,
 }
 
 #region 로비 패킷

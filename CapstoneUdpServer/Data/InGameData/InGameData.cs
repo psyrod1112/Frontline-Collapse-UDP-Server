@@ -23,11 +23,11 @@ public class InGameData
     public float NpcSpawnInterval { get; set; }
     
 
+    private static readonly Random _rng = new();
     private readonly int _maxNpcAmount = 30;
     public int CurrentNpcAmount => NpcMap.Count;
     private bool _topBossOn;
     private bool _bottomBossOn;
-    private int _npcSpawnPoint;
     private int _spawnPointAmount;
     private bool _occupationPhaseStarted;
     public bool OccupationPhaseStarted => _occupationPhaseStarted;
@@ -48,13 +48,16 @@ public class InGameData
         BuildingDataMap = new();
         NpcMap = new();
         _onProgress = true;
-        _npcSpawnPoint = 0;
-        _spawnPointAmount = 7;
-        _ = StartSystemLoop();
+        _spawnPointAmount = 5;
         _socket = socket;
-
         _stopwatch = Stopwatch.StartNew();
         _occupationPhaseStarted = false;
+    }
+
+    public void StartGame(float npcSpawnInterval)
+    {
+        NpcSpawnInterval = npcSpawnInterval;
+        _ = StartSystemLoop();
     }
     
     public (int minutes, int seconds) GetElapsedTime() 
@@ -89,35 +92,73 @@ public class InGameData
 
             if (!_occupationPhaseStarted)
             {
-                var (min, _) = GetElapsedTime();
+                var (min, sec) = GetElapsedTime();
                 if (min >= 5)
                 {
                     _occupationPhaseStarted = true;
+                    Console.WriteLine($"[Boss] 5분 경과({min}m{sec}s) → 보스 스폰 트리거");
+                    SpawnBossMonsters();
                 }
             }
-
             await Task.Delay(100);
         }
     }
     
-    private void TrySpawnNpc()
+    private void SpawnBossMonsters()
     {
-        if (CurrentNpcAmount >= _maxNpcAmount) return;
-        
-        int   npcId = NextNpcId() + 1000;
-        UnitType npcType = UnitType.Npc;
-        var npc = new NpcData(npcId, (int)npcType);
-        NpcMap[npcId] = npc;
+        if (!_topBossOn)    SpawnBoss(0);
+        if (!_bottomBossOn) SpawnBoss(1);
+    }
+
+    private void SpawnBoss(int spawnPoint)
+    {
+        if (spawnPoint == 0) _topBossOn    = true;
+        else                 _bottomBossOn = true;
+
+        int npcId        = NextNpcId() + 2000;
+        var boss         = new NpcData(npcId, 1, 500f);
+        boss.SpawnPoint  = spawnPoint;
+        NpcMap[npcId]    = boss;
 
         var buf = ProtobufSerializer.Serialize((uint)InGamePacketType.SpawnNpc, new SpawnNpcPacket
         {
-            NpcId   = npcId,
-            SpawnPoint = _npcSpawnPoint % (_spawnPointAmount),
-            NpcType = 0,
-            MaxHp   = npc.MaxHp,
+            NpcId      = npcId,
+            SpawnPoint = spawnPoint,
+            NpcType    = 1,
+            MaxHp      = boss.MaxHp,
         });
         Broadcast(_socket, buf);
-        _npcSpawnPoint++;
+        Console.WriteLine($"[Boss] 보스 스폰: npcId={npcId} spawnPoint={spawnPoint}");
+    }
+
+    public void OnBossDied(int spawnPoint)
+    {
+        if (spawnPoint == 0) _topBossOn    = false;
+        else                 _bottomBossOn = false;
+    }
+
+    private void TrySpawnNpc()
+    {
+        if (CurrentNpcAmount >= _maxNpcAmount)
+        {
+            Console.WriteLine($"[NPC] 스폰 스킵 — 현재 NPC 수={CurrentNpcAmount}/{_maxNpcAmount}");
+            return;
+        }
+
+        int npcId      = NextNpcId() + 1000;
+        int spawnPoint = _rng.Next(2, _spawnPointAmount); // 2~9 랜덤
+        var npc        = new NpcData(npcId, (int)UnitType.Npc);
+        NpcMap[npcId]  = npc;
+
+        var buf = ProtobufSerializer.Serialize((uint)InGamePacketType.SpawnNpc, new SpawnNpcPacket
+        {
+            NpcId      = npcId,
+            SpawnPoint = spawnPoint,
+            NpcType    = 0,
+            MaxHp      = npc.MaxHp,
+        });
+        Broadcast(_socket, buf);
+        Console.WriteLine($"[NPC] 스폰: npcId={npcId} spawnPoint={spawnPoint} 현재총={CurrentNpcAmount}");
     }
 
 }

@@ -361,6 +361,7 @@ public class LobbyServer : IDisposable
                 MaxHp       = unit.MaxHp,
                 CurrentGrippingItem = (int)unit.CurrentGrippingItem,
                 HotkeyIndex = unit.HotkeyIndex,
+                SpawnIndex  = playerIdx,
             }, roomData);
             playerIdx++;
 
@@ -389,6 +390,7 @@ public class LobbyServer : IDisposable
         }
         
         _inGameDataList[roomData.RoomId] = newInGameData;
+        newInGameData.StartGame(npcSpawnInterval: 10f);
 
         BroadcastDestroyRoom(new RoomPacket
         {

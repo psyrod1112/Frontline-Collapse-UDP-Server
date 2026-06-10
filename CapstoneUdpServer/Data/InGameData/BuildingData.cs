@@ -25,7 +25,8 @@ public class BuildingData
     public float MaxHp { get; set; }
     public float CurrentHp { get; set; }
     
-    public BuildingState State { get; set; }
+    public BuildingState State  { get; set; }
+    public bool          IsCore { get; set; }
 
     public int MissileCount       => NormalMissileCount + NuclearMissileCount;
     public int NormalMissileCount { get; set; }

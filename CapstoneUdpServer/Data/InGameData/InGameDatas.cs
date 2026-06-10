@@ -11,6 +11,7 @@ public enum ItemType
     Building,
     Missile,
     Heal,
+    TwoSache
 }
 
 public enum ItemName
@@ -32,7 +33,8 @@ public enum ItemName
     NuclearMissile,
     Tank,
     Bullet,
-    Shell
+    Shell,
+    Core
 }
 
 public enum UnitType { Player, Npc, Boss, Building, Environment,
@@ -56,6 +58,7 @@ public static class CombatData
         [ItemName.GyunInPo]   = new BuildingStat { MaxHp = 500f, Defense = 30 },
         [ItemName.Turret]     = new BuildingStat { MaxHp = 420f, Defense = 35 },
         [ItemName.CheckPoint] = new BuildingStat { MaxHp = 800f, Defense = 40 },
+        [ItemName.Core]       = new BuildingStat { MaxHp = 400f, Defense =  0 },
     };
 
     private static readonly Dictionary<ItemName, int> ItemDamageMap = new()
@@ -126,11 +129,13 @@ public class InGameDatas
         ItemName.Tank                                    => ItemType.Vehicle,
 
         ItemName.GyunInPo or ItemName.Turret or
-            ItemName.CheckPoint or ItemName.Artillery        => ItemType.Building,
+            ItemName.CheckPoint or ItemName.Artillery or
+            ItemName.Core                                    => ItemType.Building,
 
         ItemName.HealPack                                => ItemType.Heal,
 
-        ItemName.NormalMissile or ItemName.NuclearMissile => ItemType.Missile,
+        ItemName.NormalMissile or ItemName.NuclearMissile or ItemName.AirPlane => ItemType.Missile,
+        ItemName.Bullet or ItemName.Shell => ItemType.TwoSache,
 
         _ => ItemType.None
     };

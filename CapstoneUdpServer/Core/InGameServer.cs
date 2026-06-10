@@ -189,9 +189,65 @@ public class InGameServer
                     var npcFireEventPacket = ProtobufSerializer.Deserialize<NpcFireEventPacket>(buffer);
                     HandleNpcFireEvent(npcFireEventPacket);
                     break;
+                case (uint)InGamePacketType.HealRequest:
+                    var healRequestPacket = ProtobufSerializer.Deserialize<HealRequestPacket>(buffer);
+                    HandleHealRequest(healRequestPacket, clientEp);
+                    break;
+                case (uint)InGamePacketType.CaptureRequest:
+                    var captureRequestPacket = ProtobufSerializer.Deserialize<CaptureRequestPacket>(buffer);
+                    HandleCaptureRequest(captureRequestPacket);
+                    break;
+                case (uint)InGamePacketType.AreaAttackEffect:
+                    var areaEffectPacket = ProtobufSerializer.Deserialize<AreaAttackEffectPacket>(buffer);
+                    HandleAreaAttackEffect(areaEffectPacket);
+                    break;
+                case (uint)InGamePacketType.CoreInitRequest:
+                    var coreInitPacket = ProtobufSerializer.Deserialize<CoreInitRequestPacket>(buffer);
+                    HandleCoreInitRequest(coreInitPacket);
+                    break;
             }
         }
 
+    }
+
+    private void HandleAreaAttackEffect(AreaAttackEffectPacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        inGameData.Broadcast(_socket,
+            ProtobufSerializer.Serialize((uint)InGamePacketType.AreaAttackEffect, packet));
+    }
+
+    private void HandleCoreInitRequest(CoreInitRequestPacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+
+        int coreId = packet.SpawnIndex == 0 ? 90010001 : 90010002;
+        if (inGameData.BuildingDataMap.ContainsKey(coreId)) return; // 중복 방지
+
+        var coreData = new BuildingData
+        {
+            BuildingId   = coreId,
+            OwnerId      = 0,
+            BuildingType = ItemName.Core,
+            PosX = packet.PosX, PosY = packet.PosY, PosZ = packet.PosZ,
+            MaxHp     = 400f,
+            CurrentHp = 400f,
+            IsCore    = true,
+        };
+        inGameData.BuildingDataMap[coreId] = coreData;
+
+        inGameData.Broadcast(_socket, ProtobufSerializer.Serialize(
+            (uint)InGamePacketType.BuildingPlace,
+            new BuildingPlacePacket
+            {
+                BuildingId   = coreId,
+                OwnerId      = 0,
+                BuildingType = (int)ItemName.Core,
+                PosX = packet.PosX, PosY = packet.PosY, PosZ = packet.PosZ,
+                IsCore = true,
+            }));
+
+        Console.WriteLine($"[Core] CoreId={coreId} SpawnIndex={packet.SpawnIndex} pos=({packet.PosX},{packet.PosY},{packet.PosZ}) 생성 완료");
     }
 
     private void HandleTimerRequest(TimerRequestPacket packet, IPEndPoint clientEp)
@@ -220,6 +276,84 @@ public class InGameServer
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
         byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.AttackBuildingFire, packet);
         inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleCaptureRequest(CaptureRequestPacket packet)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+        if (inGameData.OccupationPhaseStarted == false) return;
+        double roll   = _rng.NextDouble();
+        ItemName reward = roll < 0.80 ? ItemName.NormalMissile : ItemName.NuclearMissile;
+
+        unit.AddInventory(reward);
+        Console.WriteLine();
+
+        byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.CaptureResponse,
+            new CaptureResponsePacket
+            {
+                PlayerId    = packet.PlayerId,
+                BuildingId  = packet.BuildingId,
+                CooldownSec = 180,
+                Msg = $"PlayerId={unit.PlayerName}의 점령 보상={reward.ToString()}"
+            });
+        inGameData.Broadcast(_socket, buf);
+    }
+
+    private void HandleHealRequest(HealRequestPacket packet, IPEndPoint clientEp)
+    {
+        if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
+        if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.PlayerId, out var unit)) return;
+        if (unit.IsDead) return;
+
+        unit.CurrentHp = Math.Min(unit.CurrentHp + packet.HealAmount, unit.MaxHp);
+
+        if (unit.RemoveInventory((ItemName)packet.ItemName))
+        {
+            if (unit.CurrentGrippingItem != (ItemName)packet.ItemName)
+                return;
+            switch (unit.CurrentSlotIndex)
+            {
+                case 0:
+                    unit.Shortcut1 = ItemName.None; break;
+                case 1:
+                    unit.Shortcut2 = ItemName.None; break;
+                case 2:
+                    unit.Shortcut3 = ItemName.None; break;
+                case 3:
+                    unit.Shortcut4 = ItemName.None; break;
+            }
+            
+            unit.CurrentGrippingItem = ItemName.None;
+
+            SendProto((uint)InGamePacketType.UIUpdateResponse,
+                new UIUpdateResponsePacket
+                {
+                    PlayerId = unit.PlayerId,
+                    Shortcut1 = (int)unit.Shortcut1,
+                    Shortcut2 = (int)unit.Shortcut2,
+                    Shortcut3 = (int)unit.Shortcut3,
+                    Shortcut4 = (int)unit.Shortcut4,
+                }, clientEp); //인게임 메인 UI의 미사일 -> 주먹(default)으로 바꿈
+            
+            byte[] buf1 =  ProtobufSerializer.Serialize((uint)InGamePacketType.WeaponChange,
+                new WeaponChangePacket
+                {
+                    PlayerId = packet.PlayerId,
+                    ItemName = (int)unit.CurrentGrippingItem,
+                    SlotIndex = unit.CurrentSlotIndex,
+                });
+                
+            inGameData.Broadcast(_socket, buf1);
+        }
+
+        byte[] buf2 = ProtobufSerializer.Serialize((uint)InGamePacketType.HealResponse, new HealResponsePacket
+        {
+            PlayerId  = packet.PlayerId,
+            CurrentHp = unit.CurrentHp,
+            MaxHp     = unit.MaxHp,
+        });
+        inGameData.Broadcast(_socket, buf2);
     }
 
     private void HandleNpcInterpolate(NpcInterpolatePacket packet)
@@ -391,11 +525,12 @@ public class InGameServer
                 Shortcut4 = (int)unit.Shortcut4,
             }, clientEp); //인게임 메인 UI의 미사일 -> 주먹(default)으로 바꿈
             
-            byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.ShortcutSwitchResponse,
-                new ShortcutSwitchResponsePacket
+            byte[] buf = ProtobufSerializer.Serialize((uint)InGamePacketType.WeaponChange,
+                new WeaponChangePacket()
                 {
                     PlayerId = unit.PlayerId,
-                    CurrentGrippingItemId = (int)unit.CurrentGrippingItem
+                    ItemName = (int)unit.CurrentGrippingItem,
+                    SlotIndex = unit.CurrentSlotIndex,
                 }); //미사일 소진해서 아무것도 안들고있게끔 브로드캐스팅
             
             inGameData.Broadcast(_socket, buf);
@@ -405,9 +540,11 @@ public class InGameServer
 
         SendProto((uint)InGamePacketType.MissileLoadResponse, new MissileLoadResponsePacket
         {
-            PlayerId             = packet.PlayerId,
-            BuildingId           = packet.BuildingId,
-            MissileType = packet.MissileType
+            PlayerId                    = packet.PlayerId,
+            BuildingId                  = packet.BuildingId,
+            MissileType                 = packet.MissileType,
+            LoadedNormalMissileAmount   = artillery.NormalMissileCount,
+            LoadedNuclearMissileAmount  = artillery.NuclearMissileCount,
         }, clientEp);
     }
 
@@ -527,13 +664,12 @@ public class InGameServer
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
 
-        bool isNpcAttacker = inGameData.NpcMap.ContainsKey(packet.AttackerId);
-        if (!isNpcAttacker)
+        if (packet.AttackerType == (int)UnitType.Player)
         {
             if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var attackerData)) return;
             if (attackerData.CurrentGrippingItem != (ItemName)packet.WeaponItemName)
             {
-                Console.WriteLine("서버에서 들고있는 무기랑 클라의 무기랑 다른 것 같음!");
+                Console.WriteLine($"[Hit] 무기 불일치 — 서버:{attackerData.CurrentGrippingItem} 클라:{(ItemName)packet.WeaponItemName}");
                 return;
             }
         }
@@ -560,7 +696,7 @@ public class InGameServer
             {
                 if (!inGameData.PlayerUnitDataMap.TryGetValue(packet.TargetId, out var unit)) return;
                 if (unit.IsDead) return;
-                finalDamage    = Math.Max(1, rawDamage - 5); // 플레이어 기본 방어력 5
+                finalDamage    = Math.Max(1, rawDamage - unit.Defense); // 플레이어 기본 방어력 5
                 unit.CurrentHp = Math.Max(0f, unit.CurrentHp - finalDamage);
                 currentHp      = unit.CurrentHp;
                 maxHp          = unit.MaxHp;
@@ -605,6 +741,7 @@ public class InGameServer
     {
         if (!_inGameDataList.TryGetValue(packet.FieldId, out var inGameData)) return;
 
+        if(!inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var attackerUnit)) return;
         var targetType = (UnitType)packet.TargetType;
 
         switch (targetType)
@@ -612,10 +749,16 @@ public class InGameServer
             case UnitType.Npc:
             {
                 if (!inGameData.NpcMap.TryGetValue(packet.TargetId, out var npc)) return;
-                if (!npc.IsAlive) return; // 이미 처리됨
+                if (!npc.IsAlive) return;
 
                 npc.IsAlive = false;
                 inGameData.NpcMap.TryRemove(packet.TargetId, out _);
+
+                bool isBoss    = npc.NpcType == 1;
+                int goldReward = isBoss ? 500 : RewardData.NpcKillReward.Gold;
+                int expReward  = isBoss ? 300 : RewardData.NpcKillReward.Exp;
+
+                if (isBoss) inGameData.OnBossDied(npc.SpawnPoint);
 
                 inGameData.Broadcast(_socket, ProtobufSerializer.Serialize(
                     (uint)InGamePacketType.DeathEvent,
@@ -624,28 +767,32 @@ public class InGameServer
                         TargetId   = packet.TargetId,
                         TargetType = (int)UnitType.Npc,
                         KillerId   = packet.AttackerId,
-                        GoldReward = RewardData.NpcKillReward.Gold,
+                        GoldReward = goldReward,
                     }));
 
                 if (packet.AttackerId != 0
                     && inGameData.PlayerUnitDataMap.TryGetValue(packet.AttackerId, out var npcKiller))
                 {
-                    var npcReward = RewardData.NpcKillReward;
-                    npcKiller.Gold += npcReward.Gold;
-                    npcKiller.Exp  += npcReward.Exp;
+                    npcKiller.Gold += goldReward;
+                    npcKiller.Exp  += expReward;
                     npcKiller.CSCount++;
+
+                    if (isBoss) npcKiller.AddInventory(ItemName.Bazuka);
+
                     SendProto((uint)InGamePacketType.RewardUpdate, new RewardUpdatePacket
                     {
                         PlayerId    = npcKiller.PlayerId,
-                        GoldAmount  = npcReward.Gold,  TotalGold   = npcKiller.Gold,
-                        ExpAmount   = npcReward.Exp,   TotalExp    = npcKiller.Exp,
+                        GoldAmount  = goldReward, TotalGold   = npcKiller.Gold,
+                        ExpAmount   = expReward,  TotalExp    = npcKiller.Exp,
                         CSCount     = npcKiller.CSCount,
                         Level       = npcKiller.Level,
                         RequiredExp = npcKiller.RequiredExp,
+                        MaxHp       = npcKiller.MaxHp,
+                        CurrentHp   = npcKiller.CurrentHp,
                     }, (IPEndPoint)npcKiller.IpEndPoint);
                 }
 
-                Console.WriteLine($"[Death] NPC npcId={packet.TargetId} killed by player={packet.AttackerId}");
+                Console.WriteLine($"[Death] NPC npcId={packet.TargetId} isBoss={isBoss} killed by={packet.AttackerId}");
                 break;
             }
             case UnitType.Player:
@@ -696,6 +843,16 @@ public class InGameServer
             {
                 if (!inGameData.BuildingDataMap.TryGetValue(packet.TargetId, out var building)) return;
                 if (building.CurrentHp > 0f) return; // 아직 살아있음
+
+                if (building.IsCore)
+                {
+                    inGameData.BuildingDataMap.TryRemove(packet.TargetId, out _);
+                    inGameData.Broadcast(_socket, ProtobufSerializer.Serialize(
+                        (uint)InGamePacketType.GameOverEvent,
+                        new GameOverEventPacket { WinnerPlayerId = packet.AttackerId }));
+                    Console.WriteLine($"[GameOver] CoreId={packet.TargetId} 파괴. Winner={packet.AttackerId}");
+                    return;
+                }
 
                 inGameData.BuildingDataMap.TryRemove(packet.TargetId, out _);
 

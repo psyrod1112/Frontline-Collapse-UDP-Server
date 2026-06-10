@@ -156,6 +156,7 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(10)] public float MaxHp;
         [ProtoMember(11)] public int CurrentGrippingItem;
         [ProtoMember(12)] public int HotkeyIndex;
+        [ProtoMember(13)] public int SpawnIndex;
     }
 
     [ProtoContract]
@@ -195,6 +196,7 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(5)] public float PosY;
         [ProtoMember(6)] public float PosZ;
         [ProtoMember(7)] public float RotY;
+        [ProtoMember(8)] public bool  IsCore;
     }
 
     [ProtoContract]
@@ -212,6 +214,40 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(2)] public int FieldId;
         [ProtoMember(3)] public int ItemName;
         [ProtoMember(4)] public int Amount;
+    }
+
+    [ProtoContract]
+    public class HealRequestPacket
+    {
+        [ProtoMember(1)] public int   PlayerId;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public int   ItemName;
+        [ProtoMember(4)] public float HealAmount;
+    }
+
+    [ProtoContract]
+    public class HealResponsePacket
+    {
+        [ProtoMember(1)] public int   PlayerId;
+        [ProtoMember(2)] public float CurrentHp;
+        [ProtoMember(3)] public float MaxHp;
+    }
+
+    [ProtoContract]
+    public class CaptureRequestPacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int FieldId;
+        [ProtoMember(3)] public int BuildingId;
+    }
+
+    [ProtoContract]
+    public class CaptureResponsePacket
+    {
+        [ProtoMember(1)] public int PlayerId;
+        [ProtoMember(2)] public int BuildingId;
+        [ProtoMember(3)] public int CooldownSec;
+        [ProtoMember(4)] public string Msg;
     }
 
     [ProtoContract]
@@ -346,15 +382,17 @@ namespace CapstoneUdpServer.Network
     [ProtoContract]
     public class RewardUpdatePacket
     {
-        [ProtoMember(1)] public int   PlayerId;
-        [ProtoMember(2)] public int   GoldAmount;
-        [ProtoMember(3)] public int   TotalGold;
-        [ProtoMember(4)] public float ExpAmount;
-        [ProtoMember(5)] public float TotalExp;
-        [ProtoMember(6)] public int   KillCount;
-        [ProtoMember(7)] public int   CSCount;
-        [ProtoMember(8)] public int   Level;
-        [ProtoMember(9)] public float RequiredExp;
+        [ProtoMember(1)]  public int   PlayerId;
+        [ProtoMember(2)]  public int   GoldAmount;
+        [ProtoMember(3)]  public int   TotalGold;
+        [ProtoMember(4)]  public float ExpAmount;
+        [ProtoMember(5)]  public float TotalExp;
+        [ProtoMember(6)]  public int   KillCount;
+        [ProtoMember(7)]  public int   CSCount;
+        [ProtoMember(8)]  public int   Level;
+        [ProtoMember(9)]  public float RequiredExp;
+        [ProtoMember(10)] public float MaxHp;
+        [ProtoMember(11)] public float CurrentHp;
     }
 
     [ProtoContract]
@@ -560,6 +598,8 @@ namespace CapstoneUdpServer.Network
         [ProtoMember(9)]  public float HitNormalX;
         [ProtoMember(10)] public float HitNormalY;
         [ProtoMember(11)] public float HitNormalZ;
+        // UnitType cast: Player=0, Npc=1, Building=3, Missile=5
+        [ProtoMember(12)] public int   AttackerType;
     }
 
     [ProtoContract]
@@ -627,5 +667,32 @@ namespace CapstoneUdpServer.Network
     {
         [ProtoMember(1)] public int Min;
         [ProtoMember(2)] public int Sec;
+    }
+
+    [ProtoContract]
+    public class AreaAttackEffectPacket
+    {
+        [ProtoMember(1)] public int   AttackerId;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public float PosX;
+        [ProtoMember(4)] public float PosY;
+        [ProtoMember(5)] public float PosZ;
+    }
+
+    [ProtoContract]
+    public class CoreInitRequestPacket
+    {
+        [ProtoMember(1)] public int   PlayerId;
+        [ProtoMember(2)] public int   FieldId;
+        [ProtoMember(3)] public int   SpawnIndex; // 0 → TopCore(90010001), 1 → BottomCore(90010002)
+        [ProtoMember(4)] public float PosX;
+        [ProtoMember(5)] public float PosY;
+        [ProtoMember(6)] public float PosZ;
+    }
+
+    [ProtoContract]
+    public class GameOverEventPacket
+    {
+        [ProtoMember(1)] public int WinnerPlayerId;
     }
 }

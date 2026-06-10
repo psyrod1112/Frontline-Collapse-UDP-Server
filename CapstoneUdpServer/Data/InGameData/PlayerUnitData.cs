@@ -89,7 +89,7 @@ public class PlayerUnitData
         DeathProcessed = false;
     }
     
-    public float    MaxHp            { get; set; }
+    public float MaxHp   => 100f + (Level - 1) * 10f; // 레벨당 +10 HP
     public ItemName Shortcut1        { get; set; }
     public ItemName Shortcut2        { get; set; }
     public ItemName Shortcut3        { get; set; }
@@ -120,6 +120,7 @@ public class PlayerUnitData
     }
 
     public int CurrentSlotIndex { get; set; }
+    public int Defense => (Level - 1) * 3;             // 레벨당 +3 방어
 
     public ConcurrentDictionary<ItemName, ItemData> Inventory = new();
 
@@ -138,8 +139,7 @@ public class PlayerUnitData
         CurrentGrippingItem = Shortcut1;
         CurrentSlotIndex = 0;
 
-        MaxHp     = 100f;
-        CurrentHp = 100f;
+        CurrentHp = MaxHp;
 
         Inventory[ItemName.Rifle_Normal] = new ItemData
         {
